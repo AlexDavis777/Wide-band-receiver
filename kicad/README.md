@@ -1,5 +1,5 @@
 # Wide band receiver
-Added prototype PCBs.
+Added prototype PCBs. Open Source Hardware. Please feel free to use or adapt and improve as you see fit for your project.
 
 
 Front Bezel and MCU/Display PCB boards work well.
