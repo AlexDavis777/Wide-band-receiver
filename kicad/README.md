@@ -9,6 +9,9 @@ Radio PCB Board works but is in need of further testing and layout optimization.
     <img src="bezel.png" alt="Icon" />
 
 <p align="center">
+    <img src="bezel1.jpg" alt="Icon" />
+
+<p align="center">
     <img src="MCU_PCB1.png" alt="Icon" />
 
 <p align="center">
