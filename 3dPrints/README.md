@@ -1,6 +1,8 @@
 # Wide band receiver
 3D printed parts added here.
 
+<p align="center">
+    <img src="top1.png" alt="Icon" />
 
 <p align="center">
     <img src="screenBox_mixer.png" alt="Icon" />
