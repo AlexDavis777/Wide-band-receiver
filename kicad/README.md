@@ -3,10 +3,12 @@ Added prototype PCBs. Open Source Hardware. Please feel free to use or adapt and
 
 
 Front Bezel and MCU/Display PCB boards work well.
-Radio PCB Board works but is in need of further testing and layout optimization.
+Radio PCB Board works well but is in need of further testing and possible layout optimization.
 
-Rev2 Radio board includes support MAR6-SM on same footprint as SBA4089 and for ADE-1+ mixer
+Rev2 Radio board includes support MAR6-SM on same footprint as SBA4089 and for using ADE-1+ mixer
 alternative instead of AD831.
+The ADE-1+ mixer does away with a need for the 9volt regulator and enables powering the radio from 7.4 volts.
+
 
 <p align="center">
     <img src="bezel.png" alt="Icon" />
