@@ -4,7 +4,7 @@
 #define SAMPLE_RATE 8000  // 4KHz
 #define SAMPLE_INTERVAL (1000000 / SAMPLE_RATE)
 #define RECORD_TIME 9999
-#define BUFFER_SIZE 4096  // buffer for writing onto SD, bigger = better, less "plops".
+#define BUFFER_SIZE frSize
 
 // WAV file header structure
 typedef struct {
@@ -56,36 +56,53 @@ void mountSDCard() {
 }
 
 //##########################################################################################################################//
-void wavRecord() {
+void wavRecord(uint8_t mode) {  // 0 = plain, 1 = timer, 2 = squelch
+
+  if (mode == 1) {
+    bool result = getStartEndTime();
+    if (!result)
+      return;
+  }
+
+  int endHour = recordEndTime / 100;  // 17
+  int endMin = recordEndTime % 100;   // 59
+
+
+
+
   tft.setTextColor(TFT_YELLOW);
   tft.fillRect(5, 65, 333, 225, TFT_BLACK);
-  tft.setCursor(8, 70);
-  tft.print("WAV recorder records only");
-  tft.setCursor(8, 90);
-  tft.print("when squelch is open.");
-  tft.setCursor(8, 130);
-  tft.print("Move encoder to stop rec.");
-  tft.setCursor(8, 170);
-  tft.print("While recording, only the ");
-  tft.setCursor(8, 190);
-  tft.print("squelch can be adjusted.");
-  tft.setCursor(8, 220);
-  tft.print("Creates consecutive .wav");
-  tft.setCursor(8, 240);
-  tft.print("files on SDCard.");
-  tft.setCursor(8, 260);
-  tft.print("8 Bit Mono, 8000 sampl/sec");
 
-  char tempVol = si4735.getVolume();
+
+  if (mode == 2) {
+    tft.setCursor(8, 70);
+    tft.print(F("Records only when"));
+    tft.setCursor(8, 90);
+    tft.print(F("squelch is open."));
+
+    tft.setCursor(8, 170);
+    tft.print(F("While recording, only the "));
+    tft.setCursor(8, 190);
+    tft.print(F("squelch can be adjusted."));
+  }
+
+
+  tft.setCursor(8, 130);
+  tft.print(F("Move encoder to stop rec."));
+  tft.setCursor(8, 220);
+  tft.print(F("Creates consecutive .wav"));
+  tft.setCursor(8, 240);
+  tft.print(F("files on SDCard."));
+  tft.setCursor(8, 260);
+  tft.print(F("8 Bit Mono, 8000 sampl/sec"));
+
   bool circle = false;
   bool mutestat = audioMuted;
 
   si4735.setHardwareAudioMute(false);
-  si4735.setVolume(60);
-
   mountSDCard();
 
-  // Find next available file name
+  // Find next avail file name
   int fileIndex = 1;
   String fileName;
   do {
@@ -107,31 +124,39 @@ void wavRecord() {
   WavHeader_8bit header;
   createWavHeader8bit(&header, RECORD_TIME * SAMPLE_RATE);
   f.write((uint8_t*)&header, sizeof(header));
-
-  uint32_t samplesToRecord = RECORD_TIME * SAMPLE_RATE;
-  uint8_t buffer[BUFFER_SIZE];
-  uint32_t samplesRecorded = 0;
-  int16_t offsetComp = 2048 - gpio36_Offset;
+  
   uint16_t ctr = 0;
+  audioBufSize = frSize; // 4096 need full size 
+  recordWav = true;
+  bufferPlaying = false;
+  playIndex = 0;
 
 
   while (!(clw + cclw)) {  //encoder moved
 
-    ctr++;
 
-    if (ctr == 2) {  // indroduces delay before the squelch closes
-      ctr = 0;
-      si4735.getCurrentReceivedSignalQuality(0);
-      signalStrength = si4735.getCurrentRSSI();
-      readSquelchPot(0);
-      if (signalStrength > currentSquelch)
-        si4735.setAudioMute(false);
-      else
-        si4735.setAudioMute(true);
+    if (mode == 2) {
+
+      ctr++;
+
+      if (ctr == 2) {  // indroduces delay before the squelch closes
+        ctr = 0;
+        si4735.getCurrentReceivedSignalQuality(0);
+        signalStrength = si4735.getCurrentRSSI();
+        readSquelchPot(0);
+        if (signalStrength > currentSquelch)
+          si4735.setAudioMute(false);
+        else
+          si4735.setAudioMute(true);
+      }
     }
 
 
-    if (signalStrength > currentSquelch) {
+
+
+    if ((signalStrength > currentSquelch) || mode < 2)
+
+    {
 
       if (!circle) {
         tft.fillCircle(5, 310, 5, TFT_RED);
@@ -139,20 +164,18 @@ void wavRecord() {
       }
 
 
-      uint32_t nextSampleTime = micros() + SAMPLE_INTERVAL;
 
-      for (int b = 0; b < BUFFER_SIZE && samplesRecorded < samplesToRecord; b++) {
-
-        buffer[b] = (analogRead(AUDIO_INPUT_PIN) + offsetComp) >> 4;
-
-        while ((int32_t)(micros() - nextSampleTime) < 0) {
-        }
-
-        samplesRecorded++;
-        nextSampleTime += SAMPLE_INTERVAL;
+      if (bufferFilled) { // buffer gets filled by timer interrupt 125uS
+          f.write((uint8_t*)frame, BUFFER_SIZE);
+          bufferFilled = false;
       }
 
-      f.write((uint8_t*)buffer, BUFFER_SIZE);
+
+      if (mode == 1) {  // timer mode
+        getLocalTime(&timeinfo);
+        if (timeinfo.tm_hour == endHour && timeinfo.tm_min == endMin)
+          break;
+      }
     }
 
     else {
@@ -161,13 +184,14 @@ void wavRecord() {
     }
   }
 
-  samplesRecorded = samplesToRecord;
+
   clw = false;
   cclw = false;
+  recordWav = false;
+ 
 
   f.flush();
   f.close();
-  si4735.setVolume(tempVol);
   mutestat = audioMuted;
   si4735.setAudioMute(mutestat);
   si4735.setHardwareAudioMute(mutestat);
@@ -205,25 +229,15 @@ void createWavHeader8bit(WavHeader_8bit* header, uint32_t sampleCount) {
 //##########################################################################################################################//
 
 
-// simple .wav player, has some pops and plops.
-
-
-//##########################################################################################################################//
-
-
-#define B_SIZE 2048
+// basic .wav player
 
 void playWavFile() {
-
-  uint8_t bufferA[B_SIZE];
-  uint8_t bufferB[B_SIZE];
-
 
   String selected = selectFileWithExtension(".wav");
 
   FsFile f = sd.open(selected.c_str(), O_READ);
   if (!f) {
-    tft.print("Failed to open.");
+    tft.print(F("Failed to open."));
     tft.println(selected);
     delay(1000);
     rebuildMainScreen(false);
@@ -242,75 +256,38 @@ void playWavFile() {
 
   si4735.setAudioMute(true);
 
-  uint32_t sampleInterval = 1000000 / header.sampleRate;
-  uint32_t nextSampleTime = micros();
-
-  // fill both buffers
-  int bytesA = f.read(bufferA, B_SIZE);
-  int bytesB = f.read(bufferB, B_SIZE);
-
-  bool useA = true;
-
-  int pos = 0;
-  int bytesAvailable = bytesA;
+  int bytesAvailable = 9999;
+  bool read = false;
 
   while (bytesAvailable > 0) {
-    // Output sample
+
+  if (!read) {  
+    bufferPlaying = true; // play via ISR
+    bytesAvailable = f.read( playBuffer, 512); // load into the ISR play buffer
+    read = true;
+  } 
+
+  while (bufferPlaying);
+   read = false;
 
     if (clw || cclw)
       break;
-
-
-    uint8_t sample = useA ? bufferA[pos] : bufferB[pos];
-
-    dac2.outputVoltage((uint8_t)sample);  // set the dac
-
-
-    pos++;
-    nextSampleTime += sampleInterval;
-
-    // pingpong fill the buffers wh
-    while (micros() < nextSampleTime) {
-      if (useA && bytesB < B_SIZE) {
-        int n = f.read(bufferB + bytesB, 64); //64 bytes works best, still there is a knocking sound when buffer changes
-        if (n > 0) bytesB += n;
-      } else if (!useA && bytesA < B_SIZE) {
-        int n = f.read(bufferA + bytesA, 64);
-        if (n > 0) bytesA += n;
-      }
-    }
-
-
-    if (pos >= bytesAvailable) {
-      pos = 0;
-      if (useA) {
-        bytesAvailable = bytesB;
-        bytesB = 0;  // mark buffer B empty, will refill during wait
-        tft.fillCircle(10, 310, 5, TFT_RED);
-
-      } else {
-        bytesAvailable = bytesA;
-        bytesA = 0;  // mark buffer A as empty
-        tft.fillCircle(10, 310, 5, TFT_GREEN);
-      }
-      useA = !useA;
-      if (bytesAvailable <= 0) break;  // end of file
-    }
   }
 
   f.close();
   clw = false;
-  cclw = false; 
+  cclw = false;
   si4735.setAudioMute(false);
   rebuildMainScreen(false);
+  bufferPlaying = false;
+  playIndex = 0;
 }
 
 
 //##########################################################################################################################//
 
 
-String selectFileWithExtension(const char* extension)
-{
+String selectFileWithExtension(const char* extension) {
   mountSDCard();
 
   FsFile dir = sd.open("/");
@@ -321,7 +298,7 @@ String selectFileWithExtension(const char* extension)
   }
 
   const int MAX_FILES = 24;  // more corrupts the stack
-  const int NAME_LEN  = 64;
+  const int NAME_LEN = 64;
 
   char files[MAX_FILES][NAME_LEN];
   int fileCount = 0;
@@ -335,13 +312,13 @@ String selectFileWithExtension(const char* extension)
       file.getName(name, sizeof(name));
 
       String fname = name;
-      String ext   = extension;
+      String ext = extension;
       fname.toLowerCase();
       ext.toLowerCase();
 
       if (fname.endsWith(ext)) {
         strncpy(files[fileCount], name, NAME_LEN);
-        files[fileCount][NAME_LEN-1] = 0;
+        files[fileCount][NAME_LEN - 1] = 0;
         fileCount++;
       }
     }
@@ -353,7 +330,7 @@ String selectFileWithExtension(const char* extension)
   if (fileCount == 0) {
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_RED);
-    tft.setCursor(10,150);
+    tft.setCursor(10, 150);
     tft.printf("No %s files found!", extension);
     return "";
   }
@@ -361,36 +338,36 @@ String selectFileWithExtension(const char* extension)
   int selected = 0;
   int indx = 0;
 
-  const int maxRows = 12; // 12 rows per screen
+  const int maxRows = 12;  // 12 rows per screen
   bool redraw = true;
 
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
-  tft.setCursor(10,0);
+  tft.setCursor(10, 0);
   tft.printf("Select %s file and press encoder.", extension);
-  tft.setCursor(25,300);
-  tft.print("Move encoder to stop playing.");
+  tft.setCursor(25, 300);
+  tft.print(F("Move encoder to stop playing."));
 
 
-  while (true) {
+  while (true) {  // file name drawing routine
 
     if (redraw || clw || cclw) {
 
-      for (int i=0;i<maxRows;i++) {
+      for (int i = 0; i < maxRows; i++) {
 
         int y = 30 + i * 22;
 
-        tft.fillRect(0,y,480,22,TFT_BLACK);
+        tft.fillRect(0, y, 480, 22, TFT_BLACK);
 
-        if ((indx+i) < fileCount) {
+        if ((indx + i) < fileCount) {
 
-          if ((indx+i) == selected)
+          if ((indx + i) == selected)
             tft.setTextColor(TFT_YELLOW);
           else
             tft.setTextColor(TFT_GREY);
 
-          tft.setCursor(10,y);
-          tft.print(files[indx+i]);
+          tft.setCursor(10, y);
+          tft.print(files[indx + i]);
         }
       }
 
@@ -402,23 +379,24 @@ String selectFileWithExtension(const char* extension)
         selected--;
         if (selected < indx) indx--;
       }
-      cclw = 0;
+      cclw = false;
       redraw = true;
     }
 
     if (clw) {
-      if (selected < fileCount-1) {
+      if (selected < fileCount - 1) {
         selected++;
         if (selected >= indx + maxRows) indx++;
       }
-      clw = 0;
+      clw = false;
       redraw = true;
     }
 
     if (digitalRead(ENCODER_BUTTON) == LOW) {
 
       delay(30);
-      while (digitalRead(ENCODER_BUTTON) == LOW);
+      while (digitalRead(ENCODER_BUTTON) == LOW)
+        ;
 
       return String(files[selected]);
     }
@@ -427,3 +405,71 @@ String selectFileWithExtension(const char* extension)
   }
 }
 //##########################################################################################################################//
+
+bool getStartEndTime() {  // for timer record
+
+
+  tft.fillScreen(TFT_BLACK);
+
+  if (!timeSet) {
+    tft.setCursor(10, 10);
+    tft.print("Time not set.");
+    tft.setCursor(10, 30);
+    tft.print("Starting WIFI to set time...");
+    tft.setCursor(10, 50);
+    tft.print("Time format is UTC.");
+    getTime();
+  }
+
+  else
+    getLocalTime(&timeinfo);
+  tft.setCursor(120, 300);
+  tft.print(&timeinfo, "Time %H%M UTC");
+
+  drawNumPad();
+  drawKeypadButtons();
+  tft.fillRect(4, 4, 470, 45, TFT_BLACK);
+  tft.setCursor(10, 20);
+  tft.print(F("Enter start time (HHMM) and RETURN."));
+  tPress();
+  readKeypadButtons(false);
+
+  recordStartTime = keyVal;
+
+  drawNumPad();
+  drawKeypadButtons();
+  tft.fillRect(4, 4, 470, 45, TFT_BLACK);
+  tft.setCursor(10, 20);
+  tft.print(F("Enter end time (HHMM) and RETURN."));
+  tPress();  // wait until pressed
+  readKeypadButtons(false);
+
+  recordEndTime = keyVal;
+
+  tft.setCursor(10, 30);
+  tft.printf("Record programmed for %d to %d UTC.", recordStartTime, recordEndTime);
+
+
+  int startHour = recordStartTime / 100;  // 17
+  int startMin = recordStartTime % 100;   // 59
+  tft.setCursor(10, 300);
+  tft.print("Time now:");
+
+  while (true) {
+    getLocalTime(&timeinfo);
+
+    tft.fillRect(120, 300, 300, 20, TFT_BLACK);
+    tft.setCursor(120, 300);
+    tft.print(&timeinfo, "%H%M UTC");
+    delay(1000);
+
+    if (timeinfo.tm_hour == startHour && timeinfo.tm_min == startMin) {
+      tft.fillRect(10, 25, 470, 295, TFT_BLACK);
+      return true;
+    } else if (clw + cclw) {
+      clw = false;
+      cclw = false;
+      return false;
+    }
+  }
+}

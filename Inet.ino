@@ -3,21 +3,50 @@
 void connectWIFI() {
 
   int ctr = 0;
-  tft.fillRect(0, 0, tft.width(), tft.height(), TFT_BLACK);
-  WiFi.begin(ssid, password);
-  tft.setCursor(5, 20);
-  tft.print("Connecting to WIFI\n");
+  tft.fillScreen(TFT_BLACK);
+  WiFi.begin(ssid.c_str(), password.c_str());
+  tft.setCursor(5, 5);
+  tft.print(F("Connecting to AP\n"));
   while (WiFi.status() != WL_CONNECTED) {
     ctr++;
     if (ctr == 20)
       ESP.restart();
-    tft.print(".");
+    tft.print(F("."));
     delay(500);
   }
   tft.println("connected.");
 }
 
 //##########################################################################################################################//
+
+
+const char* makeEibiFilename(struct tm *timeinfo) {//changes every 6 months
+
+  uint16_t month = timeinfo->tm_mon + 1;    //  add 1
+  uint16_t year  = timeinfo->tm_year + 1900; 
+
+
+  char letter;
+  if (month == 11 || month == 12 || month <= 3) {
+    letter = 'b';
+  } else {
+    letter = 'a';
+  }
+
+  // Last two digits of year
+  int yy = year % 100;
+
+snprintf(urlbuffer, sizeof(urlbuffer), "https://www.eibispace.de/dx/sked-%c%02d.csv", letter, yy);
+ 
+ tft.print("\n\n");
+ tft.print(urlbuffer);
+  return urlbuffer;
+}
+
+
+
+//##########################################################################################################################//
+
 
 
 void downloadFile(bool fill) {  // downloads a jpg or png file
@@ -32,20 +61,22 @@ void downloadFile(bool fill) {  // downloads a jpg or png file
   } else
     tft.printf("\n\nLittleFS mounted\n\nDownloading...");
 
-  
-File file;  
 
-if (downloadSelector < 6) {
+  File file;
+
+  if (downloadSelector < 6) {
     file = LittleFS.open("/image.img", FILE_WRITE);
-} else {
-    file = LittleFS.open("/sked-b25.lst", FILE_WRITE); // EiBi station list must not end with .csv (no automatic load)
+  } 
+  
+  if (downloadSelector == 6){
 
-}
+    file = LittleFS.open("/eibi.lst", FILE_WRITE);  // EiBi station list must not end with .csv (no automatic load)
+  }
 
-if (!file) {
-    tft.print("Failed to open file for writing\n");
+  if (!file) {
+    tft.print(F("Failed to open file for writing\n"));
     return;
-}
+  }
 
   WiFiClientSecure client;
   HTTPClient http;
@@ -69,9 +100,11 @@ if (!file) {
     case 5:
       http.begin(client, host5);
       break;
-      case 6:
-      http.begin(client, eibi);
-      break;  
+    case 6:{
+      const char* filename = makeEibiFilename(&timeinfo); // changes 2x per year
+      http.begin(client, filename); 
+    }
+      break;
   }
 
   int16_t httpCode = http.GET();
@@ -133,9 +166,12 @@ int32_t mySeek(PNGFILE *handle, int32_t position) {
 //##########################################################################################################################//
 int PNGDraw(PNGDRAW *pDraw) {
   uint16_t usPixels[2500];
-  const uint32_t leftShift = -110, downShift = 70;
+  //const uint32_t hShift = -110, vShift = 70;
+  const uint32_t hShift =  20, vShift = -70;
   png.getLineAsRGB565(pDraw, usPixels, PNG_RGB565_BIG_ENDIAN, 0xffffffff);
-  tft.pushRect(leftShift + xShift, pDraw->y - downShift + yShift, pDraw->iWidth, 1, usPixels);
+  //tft.pushRect(leftShift + xShift, pDraw->y - downShift + yShift, pDraw->iWidth, 1, usPixels);
+  tft.pushRect(hShift + xShift, pDraw->y - vShift + yShift, pDraw->iWidth, 1, usPixels);
+  
   return 1;
 }
 
@@ -151,7 +187,14 @@ void drawIBtns() {
     const char *label;
   };
 
-  Button buttons[] = {
+  const Button buttons[] PROGMEM = {
+
+    { 20, 133, "Get" },
+    { 20, 153, "UTC" },
+    { 100, 133, "" },
+    { 100, 153, "" },
+    { 190, 133, "WiFi" },
+    { 190, 153, "Interf." },
     { 20, 190, "Downl." },
     { 20, 210, "EiBi" },
     { 100, 190, "SW" },
@@ -175,7 +218,8 @@ void drawIBtns() {
 
   etft.setTTFFont(Arial_14);
 
-  for (int i = 0; i < 14; i++) {
+
+  for (int i = 0; i < sizeof(buttons) / sizeof(buttons[0]); i++) {
     etft.setCursor(buttons[i].x, buttons[i].y);
     etft.print(buttons[i].label);
   }
@@ -188,7 +232,7 @@ void readIBtns() {
   tDoublePress();
 
   preferences.putBool("fB", true);  // Does not go back to main menu, uses fast restart instead. Image displays eats up too much memory and does not reliably free it
-                                          //, so better reboot after leaving
+                                    //, so better reboot after leaving
   int buttonID = getButtonID();
 
   if (buttonID >= 31)
@@ -196,14 +240,23 @@ void readIBtns() {
 
   switch (buttonID) {
     case 21:
-    break;
-    case 31:  
-    downloadSelector = 6; // EiBi station list
-    connectWIFI();
-    downloadFile(true);
-    WiFi.disconnect();
-    preferences.putBool("fB", true);  // set fastboot
-    ESP.restart();
+      tft.setCursor(10, 80);
+      tft.print(F("Connecting to pool.ntp.org."));
+      getTime();
+      break;
+    case 22:
+      break;
+    case 23:
+      webIF();
+      break;
+    case 31:
+      downloadSelector = 6;  // EiBi station list
+      connectWIFI();
+      while (!getLocalTime(&timeinfo)); //need month and year to selecct Eibi file
+      downloadFile(true);
+      WiFi.disconnect();
+      preferences.putBool("fB", true);  // set fastboot
+      ESP.restart();
       break;
     case 32:  // SW fade map
       downloadSelector = 1;
@@ -323,6 +376,7 @@ void PNGWrapper(int cycle) {
     connectWIFI();
     downloadFile(false);
     WiFi.disconnect();
+    tft.fillScreen(TFT_BLACK);
     displayPNG();
     for (long i = 0; i < cycle * 600; i++) {
       get_Touch();
@@ -350,8 +404,8 @@ void reportWrapper(int cycle) {
       if (offset < 0)
         offset = 0;
 
-      clw = 0;
-      cclw = 0;
+      clw = false;
+      cclw = false;
 
       if (oldOffset != offset) {
         displayReport(offset);
@@ -473,5 +527,175 @@ void displayReport(size_t offset) {
     ccounter++;
   }
 }
+
+//##########################################################################################################################//
+
+
+
+void getTime() {
+
+  uint8_t ctr = 0;
+
+  WiFi.begin(ssid.c_str(), password.c_str());
+
+  while (WiFi.status() != WL_CONNECTED) {
+    if (++ctr == 20) {
+      WiFi.disconnect();
+      WiFi.mode(WIFI_OFF);
+      return;
+    }
+    delay(500);
+  }
+
+
+  configTime(0, 0, "pool.ntp.org");
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("Failed to get time");
+    tft.setCursor(10, 100);
+    tft.println("Failed to get time");
+    delay(1000);
+    WiFi.disconnect();
+    WiFi.mode(WIFI_OFF);
+    return;
+  }
+
+  else timeSet = true;
+  tft.setCursor(10, 100);
+  getLocalTime(&timeinfo);
+  tft.print(&timeinfo, "Time: %H:%M UTC");
+  delay(1000);
+  WiFi.disconnect();
+  WiFi.mode(WIFI_OFF);
+}
+
+
+
+
+//##########################################################################################################################//
+void prepareWebIF() {
+
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_GREEN);
+  tft.setCursor(0, 0);
+
+
+  tft.println("Starting WiFi interface...\n");
+  tft.println("WiFi interface needs to disable\nseveral other functions.\n\n");
+
+  WiFi.begin(ssid, password);
+  tft.print("Connecting to: ");
+  tft.print(ssid.c_str());
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    tft.print(".");
+  }
+  
+
+
+  tft.println("\n\nWiFi connected!\n\n");
+  tft.print("Touch to continue and open ");
+  tft.setTextColor(TFT_WHITE);
+  tft.print(WiFi.localIP());
+  tft.setTextColor(TFT_GREEN);
+  tft.print("in browser.\n\n");
+  tft.setTextColor(textColor);
+  tPress();
+  tRel();
+  delay(1000);
+  tft.fillScreen(TFT_BLACK);
+  rebuildMainScreen(false);
+}
+
+
+
+
+//##########################################################################################################################//
+
+//##########################################################################################################################//
+
+
+
+void notifyClients() {
+  String msg = String(FREQ) + "," + String(signalStrength);
+  ws.textAll(msg);  // send to all connected clients
+}
+
+
+
+//##########################################################################################################################//
+
+void webIF() { // webIF needs >95K free heap
+
+  prepareWebIF();
+
+  webIFActive = true;
+  spr2.deleteSprite();  // free heap from rolling RSSI trace
+  sprite2Init = false;
+
+  spr1.deleteSprite();  // free heap from miniwindow
+  sprite1Init = false;
+
+
+  // define routes, handlers
+  aserver.on("/", HTTP_GET, [](AsyncWebServerRequest *req) {
+    req->send(200, "text/html", index_html);
+  });
+
+  aserver.on("/setfreq", HTTP_GET, [](AsyncWebServerRequest *req) {
+    if (req->hasParam("f")) {
+      FREQ = req->getParam("f")->value().toInt();
+      notifyClients();
+      audioBufSize = 256;  // reduce audio buffer to reduce lag
+    }
+
+    req->send(200, "text/plain", "FREQ changed");
+  });
+
+  aserver.on("/setmode", HTTP_GET, [](AsyncWebServerRequest *req) {
+    if (req->hasParam("m")) {
+      newMode = req->getParam("m")->value().toInt();
+      modeChangeRequested = true;  // client changes modulation type
+      audioBufSize = 256;
+      if (streamAudio) {
+        streamAudio = false;  // interrupt audio streaming
+        wasStreaming = true;
+      }
+    }
+    req->send(200, "text/plain", "123 ");
+  });
+
+  aserver.on("/stepfreq", HTTP_GET, [](AsyncWebServerRequest *req) {
+    if (req->hasParam("step")) {
+      int step = req->getParam("step")->value().toInt();
+      FREQ += step;
+      notifyClients();
+    }
+    req->send(200, "text/plain", String(FREQ));
+    audioBufSize = 256;  // reduce audio buffer to reduce lag
+    frameIndex = 0;
+  });
+
+  aserver.on("/audioctl", HTTP_GET, [](AsyncWebServerRequest *req) {
+    if (req->hasParam("on")) {
+      streamAudio = (req->getParam("on")->value() == "1");
+    }
+    req->send(200, "text/plain", streamAudio ? "AUDIO ON" : "AUDIO OFF");
+  });
+
+
+
+
+  ws.onEvent([](AsyncWebSocket *server, AsyncWebSocketClient *client,
+                AwsEventType type, void *arg, uint8_t *data, size_t len) {
+    if (type == WS_EVT_CONNECT) {
+      client->text("Connected");
+    }
+  });
+
+  aserver.addHandler(&ws);
+  aserver.begin();
+}
+
 
 //##########################################################################################################################//

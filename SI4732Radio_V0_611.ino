@@ -1,38 +1,36 @@
 //##########################################################################################################################//
 
+//***************** Please note that this firmware will NOT work on ATS25 derivates! ***********************************//
+
+
 //IMPORTANT: To compile, select the "ESP32 Dev Module" and the "No OTA (2MB APP, 2MB SPIFFS)" partition scheme.
 
 // Comment/uncomment compiler directives according to your hardware:
 
 #define TV_TUNER_PRESENT  // If this option is commented out, a shortwave receiver version will compile. In this case max. FREQ = 50MHz.
 
-#define AUDIO_SQUAREWAVE_PRESENT  // Audio squarewave present on GPIO39 for SSTV and RTTY decoding. Experimental.
+//#define AUDIO_SQUAREWAVE_PRESENT  // Audio squarewave present on GPIO39 for SSTV and RTTY decoding. Experimental.
 
 #define FAST_TOUCH_HANDLER  // Invokes a faster touch handler with reduced sampling. Could cause spurious errors if the touchscreen is worn out, but increases speed significantly. No problems so far.
 
 #define SHOW_DEBUG_UTILITIES  // Will show Debug utilities panel. Contains helper functions and status messages.
 
-//#define NBFM_DEMODULATOR_PRESENT  // Uses an additional MC3361 as hardware NBFM demodulator. Better audio than the SI4732 flank demodulator
-// Provides a "tuning" meter like in old FM Stereo receivers and software AFC.
+//#define NBFM_DEMODULATOR_PRESENT  // Uses an additional MC3361 as hardware NBFM demodulator. Better audio than the SI4732 flank demodulator. Provides a "tuning" meter like in old FM Stereo receivers and software AFC.
 
-//#define CRYSTAL_FREQ_BELOW_IF  // Uncomment only if using an NBFM demdulator with a crystal frequency below 21.4MHz. This will reverse afc and tuning meter direction.
+//#define CRYSTAL_FREQ_BELOW_IF  // Activate only if using an NBFM demdulator with a crystal frequency below 21.4MHz. Activating will reverse afc and tuning meter direction.
 
-//#define SI5351_GENERATES_CLOCKS  //If uncommented, the SI5351 will generate the LO frequency plus 2 clocks, 4MHz for the tuner and 32768Hz for the SI4732.
+#define SI5351_GENERATES_CLOCKS  //If active, the SI5351 will generate the LO frequency plus 2 clocks, 4MHz for the tuner and 32768Hz for the SI4732.
 
 //#define TINYSA_PRESENT  // Syncs and controls a tinySA with receiving frequency, if connected via serial to the ESP32.
 
-//#define SW_ATTENUATOR_PRESENT  // uncommment only if a voltage controlled attenuator is present in the shortwave RF path.
-//Generates gain control voltage on dac1(GPIO_NUM_25). 0V = max. gain, 3.3V = min gain.
+//#define SW_ATTENUATOR_PRESENT  // Activate only if a voltage controlled attenuator is present in the shortwave RF path. Generates gain control voltage on dac1(GPIO_NUM_25). 0V = max. gain, 3.3V = min gain.
 
-//#define FLIP_IMAGE  // Uncomment this if the image is upside down.
-//#define TFT_INVERSION_ON// Uncomment if the image is inverted.
+#define HTTTP_PORT 80  // Port for remote interface. Change if you connect from outside your local WiFi.
 
+//#define FLIP_IMAGE  // Activate this if the image is upside down.
 
-const char* ssid = "YourSSID";          // WIFI credentials needed for web tools and LittleFS uploader
-const char* password = YourPw";  // WIFI credentials needed for web tools and LittleFS uploader
+//#define TFT_INVERSION_ON  // Activate if the image is inverted.
 
-const long tunerIFLowEnd = 37000000l;  // Defines the 1 MHz segment of the tuner IF spectrum which will be used. This constant determines the low end of the segment, usually 37MHz.
-                                       // No need to change, except for NTSC tuners. Philips NTSC tuners use: const long tunerIFLowEnd = 45000000l;
 
 //##########################################################################################################################//
 
@@ -41,7 +39,7 @@ This firmware covers a wide band receiver project. It is an experimental receive
 It does require RF experience and tools.
 
 It uses a NOS "tin can" I2C TV tuner and covers 0.1 - 860MHz.
-The driver module "TVTuner.ino" is designed for Philips PAL I2C tuners and has been tested on UR1316-3 and CD1316-3 tuners. UV1316-3 tuner should also work.
+The driver module "TVTuner.ino" is designed for Philips PAL I2C tuners and has been tested on CD1316-3  and on UR1316-3 tuners. UV1316-3 tuner should also work.
 Other Philips I2C tuners may have a different pinout and different IF and AGC specs, but many use the same data format and should work.
 
 It may be possible to adapt it for other brands by adjusting the data packet that gets sent to the tuner. 
@@ -61,42 +59,39 @@ The shortwave receiver will have better filtering and smoother tuning than a SI4
 If you build the"shortwave only" version, please connect the ouput of the lowpass via 220nF to the RF input of the AD831 mixer.
 
 For testing, the GUI can be started with only the ESP32 and the ILI9488 display connected, but responses will be sluggish and several of the functions will not work.
-The receiver can be tested with only the SI4732 connected (no SSB). Select "No Mixer" in the "Debug" panel. 
+As a next step, the receiver can be tested with the SI4732 connected (no SSB). Therefore select "No Mixer" in the "Debug" panel. 
 In this case connect the antenna directly to the AM input of the SI4732. "No Mixer" is not sticky and for testing only.
 
 
 IMPORTANT: To compile, select the "ESP32 Dev Module" and the "No OTA (2MB APP, 2MB SPIFFS)" partition scheme. 
-It should then compile without issues. Some warning messages from the libraries may show up. They are not relevant.
+It should then compile without issues. Some warning messages from the libraries may show up. They are not relevant. 
+Latest Arduino IDE version and library versions will work. Older versions may break the code. 
 
 
 Hardware description:
 
-1. RF gets amplified 10db using a SBA4089 gain block.  YG602020 or any other gain block that goes down to 100KHz with a high enough IP3 can also be used. 
-If sensitivity is insufficient (around -110dBm for a cearly discernable AM signal), an addidional LNA can be placed in front oft the gain block. 
-This will however decrease dynamic range and increase intermodulation products. 
+1. RF gets amplified 19 db using a SBB5089 gain block. SBA4089, YG602020 or any other gain block that goes down to 100KHz with a high enough IP3 can also be used. 
 
-A small signal relay switches the LNA output between the tuner input (75Ohms) and the 0-50MHz lowpass filter for SW mode.
+A small signal relay switches a lowpass filter btw. antenna and gain block when in SW mode. This relay and lowpass can be omitted, but strong FM radio stations could then saturate the gain block.
+Another small signal relay switch the LNA output between the tuner input (75Ohms) and the second 50MHz lowpass filter. It also switches the tuner IF output 
+Schematic for an optional frontend has been included. The optional frontend uses RF switch IC's instead of relays. It is harder to build, but avoids the disadvantages of the relays. 
 
-The UR 1316 tuner output pins are connected to the IF relay, the I2C bus, +33V from a 5->33V bost converter and the AGC output of the ESP32. 
-A transistor logic switches the tuner and the boost converter power off when frequency < 50MHz. If frequency stability of the tuner is more important than 
-power consumption, omit this logic. It helps saving current and eliminates possible crosstalk fromt he tuner output when in shortwave mode. 
-It means however that the tuner will warm up and cool down and have frequency drift. My tuner drifts about 2KHz.
-The CD1316 tuner has a different pinout and does not need the boost converter.
+
+The TV tuner pins  are connected to the small signal relay, the I2C bus and the AGC output of the ESP32. 
+A transistor logic switches the tuner and the boost converter power off when frequency < 50MHz.
+The UV1316 tuner has a different pinout and will need a 5-> 33V boost converter 
 
 The ACG voltage from the ESP32 drives tuner gain down when a  strong signal is received. 
 To reduce intermodulation, the AGC voltage reduces tuner amplifiction even when no signal is received.
 
 
-2. The IF output of the tuner connects via a resistor to parallel resonant LC and the IF input relay. Both together reduce the tuner output by some 20dB.
-
-The IF relay switches either the output of the tuner or the lowpass filter output to the input of the AD831. The lowpass filter for shortwave reception must
-have at least 70dB attenuation in the FM radio band, otherwise mix products caused by the 3rd harmonic of the LO will be audible. 
-A 9th order Chebychev filter is adequate.
+2. The IF output of the tuner connects via a trimpot to the lowpass filter. Adjust the trimpot to the lowest signal level that causes no SNR degradation. 
+The second lowpass filter should have at least 70dB attenuation in the FM radio band and above.
 
 AD831 gets fed with CLK2 from the SI5351. 
 The SI5351 oscillates 21.4MHz above the desired frequency (LO above RF). When the tuner is in use, SI5351 oscillates 21.4 MHz above the tuner's IF spectrum and the receiver acts
 as a double conversion receiver (actually triple conversion when counting the SI4732's internal conversion).
-The tuner acts as a converter with an IF bandwidth of 8 MHz. Only 1 MHz of the IF spectrum will actually be used.
+The tuner acts as a converter with an IF bandwidth of 8 MHz. Only 1 MHz (normally 37-38MHz) of the IF spectrum will actually be used.
 The tuner PLL gets programmed in 1MHz steps and the SI5351 covers the range inbetween.
 Tuners UR/UV1316 require a 5V -> 33V boost converter. A boost converter with NE555 produced audible interference, 
 I therefore use a transistorized converter that oscillates at about 6KHz.
@@ -106,6 +101,9 @@ Tuners UR/UV1316 cover from 50 - 860 MHz. Sensistivity of the receiver is about 
 
 
 4. The IF output of the AD831 enters a crystal filter which is made of 3 * 21.4 MHz (Aliexpress) filters in series. 
+An impendance transformer coil (L6) may be used to overcome the mismatch btw the 50 Ohms output of the AD831 and the high impendace input of the crystal filter.
+The coil requires careful adjustment to be in resonance at 21,4MHz. It can be omitted, this will reduce the signal level by around 6dB.
+
 The housings of the 2nd and 3rd filter are always grounded, while the 1st is grounded via 22pf and a ground path through 2 diodes that can be activated in the software. 
 These allows to change the IF bandwidth.
 The filters flanks should not be too steep, otherwise NBFM flank demodulation will get distorted. Filters with 7.5KHz or 15KHz filter bandwidth (21M7, 21M15) are recommended.
@@ -117,14 +115,13 @@ The higher the IF, the better image rejection will be.
 
 5. A tinySA can be used as optional panorama adapter. 
 
-6. The crystal filter output connects to a SI4732. There is quite a loss (10 - 15 db estimated) caused by the the crystal filter, since it does not use impendance transformation, 
-but the preamp provides enough amplification to overcome it. 
+6. The crystal filter output connects to a SI4732. 
 The SI4732 is controlled by an ESP32 development board with 38 pins. (The 30 pin dev board does not provide enough GPIO's.) 
 SI4732 is in the standard configuration , optionally with an external 32.768 KHz TCXO.
 One of the audio outputs go to a squelch transistor which is driven by one of the ESP32 GPIO's. It grounds the audio signal when triggered and eliminates noise and the hard cracks when switching mode.
-From the squelch transistor the signal goes to the volume potentiomenter and then to a LM386 audioamplifier which drives headphones and speaker. GPIO26 is connected via a resistor
-to the input of the audio amplifier and provides a short touch sound. 220K provides a smooth touch sound, 22K a strong one.
-The other audio output (pin 16) goes via a transistor amplifier to the sampling input of the ESP32 GPIO36.
+From the squelch transistor the signal goes to the volume potentiomenter and then to a LM386 audioamplifier which drives headphones and speaker. GPIO26 is connected via a trimpot
+to the input of the audio amplifier and provides a short touch sound and/or the audio playback from SD card recordings. 220K provides a smooth touch sound, 22K a strong one.
+The other audio output (pin 16) goes via a transistor amplifier to the sampling input of the ESP32, GPIO36.
 
 
 7. The ESP32 drives the SI4732 and SI5351 on the same I2C bus. Bus speed is 2MHz, but will get autmatically reduced if the ESP32 can't initiate the SI4732 
@@ -136,15 +133,15 @@ This code will only work with ILI9488 480*320 pixel displays and is NOT adaptabl
 
 8. 12V DC input input gets regulated through two linear regulators down to +5 and +9V. Power consumption is about 400-500ma. Both regulators require a small heatsink.
 
-9. For the FFT analysis and the morse decoder, audio output pin 16 goes via 4.7K and 1 microfarad to the base of a npn transistor amplifier. Emitter via 100 Ohms to ground, base via 47K to collector and collector via 1K to +3.3V.
-Collector then goes to pin 36 of the ESP which does the sampling. Gain should be about 20 dB and 1V pp audio at the output works fine.
+9. For the FFT analysis and the morse decoder, audio output pin 16 goes via 4.7K and 1 microfarad to the base of a npn transistor amplifier. 
+   Gain should be about 20 dB and 0.5 - 1V pp audio at the output works fine.
 
 10. An additional audio amplifier with a square wave forming circuit consisting of a two transistor amplifier (and optionally a NE555) can be connected to GPIO39.
 This allows the experimental SSTV and RTTY decoders to work.
 
 11. If you use a tinySA, connect GPIO 1 of the ESP32 with the RX pin of the tinySA and GPIO 3 with the TX pin (close to the battery connector).
 This will allow control of tinySA parameters from the receiver menu.
-It will also allow calibrated measurement of the signalstrength in dBm and microvolts (using the seleced RBW of the tinySA). 
+It will also allow calibrated measurement of the signalstrength in microvolts (using the seleced RBW of the tinySA). 
 If you do this, please note that the tinySA needs to be switched off when loading firmware into the ESP32.
 Connect the tinySA audio output via 10K and 0.1uF in series to the audio output of the SI4732.
 You can then listen to the tinySA. Check the Youtube video to see how it works.
@@ -154,22 +151,22 @@ You can then listen to the tinySA. Check the Youtube video to see how it works.
 The SD Card CS pin gets connected to ESP32 GPIO 33. Not all SD cards work, this seems to be a limitation of the SD card library. Try several, including older ones. 
 
 13. The receiver does require a formatted LittleFS file system on the ESP32 flash. It will auto format during the 1st run. Several files are needed on LittleFS.
-These files are located in the \data folder of this sketch. Upload them either with the WIFI uploader or through SD card. csv files can be edited and contain station mames and frequencies 
+These files are located in the \data folder of this sketch. Upload them either with the WIFI uploader or from SD card. csv files can be edited and contain station mames and frequencies 
 Do not introduce additional commas, CR or else anyting into the lines of the CSV files, there is little error checking implemented.
 
-14. An experimental option to record audio to SDcard has been implemented. It will record only when squelch is open and it's performance depends on the SDcard.
+14. An option to record audio to SDcard has been implemented. Depending on the speed and quality of the SD card, "plops" may get introduced. 
 
 15. An additional NBFM demodulator has been developed since the SI4732 demodulates NBFM only via flank demodulation. 
-An MC3361 converts 21.4MHz to 400KHz and uses a quadrature demodulator to generate audio and the discriminator voltage which can be displayed on the upper tuning meter.
-The Q of the quadrature LC is critical, you may need to experiment with different values.
+An MC3361 converts 21.4MHz to around 400KHz and uses a quadrature demodulator to generate audio and the discriminator voltage which can be displayed on the upper tuning meter.
+The Q of the quadrature LC is critical, you may need to experiment with different L and C values.
 
-16. I have not designed a PCB. The ESP board is directly attached to the backside of the display and so is the LM386 audio amp.  
+16. I have not designed a PCB. The ESP board is directly attached to the backside of the display.  
 The IF/RF part is build upon the copper sides of two seperate (unetched) PCB's with the SI4732, the NBFM demodulator, crystal filter and voltage regulators on one.
 The LNA, TV tuner, 33V boost converter, AD831 and SI5351 are on the other board. All RF/IF modules are built in separate shielded boxes.
 Audio uses a separate ground from the digital lines.
 
 The I2C and SPI buses of the receiver and tinySA will cause some noise on some frequencies, 
-but with a clean built and proper shielding techniques these noises will mostly get buried in the atmospheric noise. Shielding and good grounding is important!
+but with a clean built and proper shielding techniques these noises will mostly get buried in the atmospheric noise. Shielding and consistent grounding is important!
 
 17. For better frequency stability a TCXO can be used: Replace crystal of the SI5351 module with a 25MHz TCXO as described on the internet. 
 In this case do not use a 32768Hz crystal with SI4732. Connect CLK0 via 1nF to pin 13 of SI4732. 
@@ -177,17 +174,13 @@ Carefully remove the 4MHz crystal from tuner. Connect CLK1 via attenuator (see s
 
 18. The TV tuner provides good attenuation outside it's filter bandwidth. By design it does not provide attenuation within it's channel bandwith (+-4MHz), 
 so strong signals within the bandwidth can cause intermodulation in the first tuner stage.
- "Tun. Attn" will reduce the tuner gain. It will also affect the point where the tuner agc kicks in. 
+The "Tun. Attn" submenu  will reduce the tuner gain. It will also affect the point where the tuner agc kicks in. 
 If you hear crossmodulation, use the "Tuner Attn" button to adjust the AGC until crossmodulation disappears.
 
 19. Using a wide band antenna (discone) can cause intermodulation in the SBA4089. The most obvious effect is an increased noise floor. Try a FM bandstop filter.  
 
 
-
-
-
-
-Initial steps:
+Get the receiver running:
 
 1. Touch the screen while the receiver is booting up for the first time. You should see a temporary screen. Press the encoder and 
 follow the instructions to calibrate the touch screen. After that, touch the screen with a stylus and move the stylus around. 
@@ -202,19 +195,27 @@ If so, press the encoder to save, or move the encoder to recalibrate. Proper cal
    Instead of directly grounding the filter housings, I grounded it via 22pf.
    This gave a single flat peak.
 
-5. Feed antenna input with 10MHz (precise) and tune to 10MHz. In Config -> Calib SI5351: Adjust for strongest dBm or microvolt level.
+5. Feed antenna input with 10MHz (precise) and tune to 10MHz. In Config -> Calib SI5351: Adjust for strongest dBm level.
    This will correct the offset of the SI5351. 
 6. Change modes to USB and LSB and adjust the BFO's to zero Hz audible tone. Change mode to CW and set the BFO to roughly 600Hz. Press button Audio WF. It should draw a red line. If not, correct
    Master Volume.
-7. Feed antenna input with 10MHz and a calibrated level. In More Config -> Gain Calibr. adjust displayed dBm value to the calibrated level. This will only calibrate the displayed level 
-   for SW, not for VHF/UHF.
+7. Feed antenna input with 10MHz and a calibrated level. In  MoreConfig -> SMeter Adjust adjust displayed dBm value to the calibrated level. Calibration is only valid for Shortwave.
+
 8. For TV tuner: Set your signal generator to it's highest possible frequency between 50 and 870MHz. Set the radio to the same frequency. 
    In More Config -> Tuner +-ppm adjust for strongest signal, press encoder to save. This setting is unfortunately somewhat temperature dependent.
 9. Additionally for SSB in VHF/UHF calibrate the TV tuner BFO's for zero Hz audible tone.
 
-10. Tap on "More -> Storage". Use either SD card or the WIFI uploader to transfer the files in the \data folder to the LittleFS.
+10. For NBFM demodulator: Either 21 or 22MHz crystals will work. The combination of L1/C8 should be adjustable in frequency and cover 400 - 600 KHz resonant frequency.
+    I have successfully used "tin can" IF filters from old AM radios. With a FM test signal (3KHz deviation) adjust for lowest audio distortion. Increase/decrease R1 as needed.
+    The voltage on pin 9 of the MC3361 should be between 1 and 2 volts. 
+    Calibrate tuning meter sensitivity and zero adjust with "More" -> "Config" -> "More Config" -> "Tuning Meter"
 
-11. Tap on More -> Web Tools -> EiBi List to download the latest shortwave station list if interested. This should be repeated every 6 months or so.
+11. Tap on "More" -> "Config" -> "WIFI Cred." and enter your WIFI credentials.
+The receiver will run without WIFI connection, but several functions will not be available.
+
+12. Tap on "More -> Storage". Use either SD card or the WIFI uploader to transfer the files from the \data folder of this sketch to the LittleFS.
+
+13. Tap on More -> Web Tools -> EiBi List to download the latest shortwave station list if interested. This should be repeated every 6 months or so.
 
 --------------
 
@@ -280,16 +281,20 @@ Tuned frequency stays at the center.
 Slower, since TinySA must rebuild the entire screen whenever frequency changes.
 
 
-TinySA Config: Adjust Span and Bandwidth.
+Temp. Param: Adjust Span and Bandwidth, but will not save them.
 
 Listen: Option to enable “Listen” if TinySA audio output is connected to the receiver’s audio amp.
 
-TinySA Sync:
-Synd disabled: TinySA works independently from the receiver.
-
-Sync enabled: Tunes a 1MHz segment around the receiver frequency. Marker 1 follows the tuned frequency.
+Sync Markers:
+OFF: Markers will not be read/set. The marker buttons in the bottom right area will disappear.
+ON: Tunes a 1MHz segment around the receiver frequency. Marker 1 follows the tuned frequency.
 Marker 2 shows strongest peak within the 1 MHz segment.
-Receiver uses TinySA’s dBm value for S‑Meter readings (more precise than SI4732 RSSI).
+Receiver uses TinySA’s dBm value for microvolt readings (more precise than SI4732 RSSI).
+
+Unsync: TinySA window will no longer follow frequency changes. Valid only until next reboot.
+Use if you want to use the tinySA independently.
+
+
 
 
 
@@ -309,13 +314,18 @@ Software hints:
 There is little error checking implemented, so if you press combinations that make no sense you will get a result that makes no sense.
 
 Options to select a frequency: 
-1.Set Frequency manually via "Set Freq", 2. Load freq from Memo, 3. Select a Band, 4. Use Up- Down keys, or 5. tap the frequency display either
-on the left or right side.
+1.Set Frequency manually via "Set Freq", 2. Load freq from Memo, 3. Select a Band, 4. Use Up- Down keys, or 5. tap the frequency digits either in the lower or the upper half.
 
-"Select Band": Loads a predefined band from struct BandInfo. Configurable, tuning either without limits (can leave the band) or loop mode (stays within band). 
+"Select Band": Loads a predefined band from struct BandInfo. Configurable tuning either without limits (can leave the band) or loop mode (stays within band). 
+This file is located on LittleFS and can be exported, manually edited and reimported. 
+
 Scan: Seek up, Seek down, or set a range. Scan is squelch driven. If band loop mode is enabled, Seek will stay within the band. 
 
-Memory scan: Only possible within 1 page. Press Scan, then press the buttons to scan, then scan again. Close squelch enough to avoid stuttering.
+Save/Load Memo: Loads memory entries from/to file MemoInfo.csv. This file is located on LittleFS and can be exported, manually edited and reimported. 
+Memory scan: Only possible within 1 page. Press Load Memo, Scan, then press the buttons to scan, then scan again. Scanning is squelch triggered.
+
+Load list: Loads and displays station list from file "memory.csv". This file is located on LittleFS too. It is a PicoRX compatible stationlist and can be edited with a csv editor. 
+Ony frequency and mode will be read, the other parameters are PicoRx specific. 
 
 AutoSquelch: If activated (default), either SNR OR RSSI will trigger the squelch. The squelch will always open  when SNR is above 0, no matter squelchpot position. 
 The squelch will adapt (get less sensitive) if it opens multiple times quickly (stuttering).  
@@ -324,24 +334,16 @@ The squelchpot will still set the RSSI (signal strength) treshold. The little "S
 Slow Waterfall: Displays either a frequency range "View Range", or a band "View Band" as a waterfall. Use the fine tune potentiometer to adjust sensitivity and colors.
 Touch on a spot on the lower horizontal signal bar (while it says "SCANNING") and enter listen mode. 
 Touch on the waterfall to go back to scan mode, or touch SET to set the frequency and leave. 
-"Show 1MHz" will show a 1 MHz waterfall display. The fine tune potentiometer is not in use in this mode. Touch on a peak to listen to it.  
 
-
-Touch Tune: Shows += 500KHz around tuned frequency, use encoder to change frequency. Touch a spot on the signal area and it tunes in and you can listen to frequency.
-If the frequency is somewhat off, use encoder to fine tune. Touch "Cont." to leave frequency and continue.Touch back to go back to main menu without setting the frequency. 
-Touch "Set" to go back to main menu and set frequency.
-
-3D Waterfall displays a trapezoid that shows frequency time relationship and gives the illusion of a 3D waterfall.
+"Show 1MHz" will show a 1 MHz waterfall display. Use encoder to change the segment. The fine tune potentiometer is not in use in this mode. Touch on a peak to listen to it.  
 
 1MHz steps: After pressing the encoder,step size will be changed to 1MHz. This helps to rapidly view 1MHz segments on the tinySA. Press encoder again to return to previous step size.
 
-
 Station scan: Will scan through a list of (25) predefined stations. Can be configured to stop when audio or carrier is detected. 
 
-Show Panorama: Will display a +-500KHz spectrum around the tuned frequency when the squelch is closed. Squelch should open when there is a signal at the tuned frequency. 
-If a signal on the center frequency does not open the squelch, multiple erroneous peaks will be shown. Close squelch just a bit.
-
-To change modulation, bandwith, filter bandwidth, or ACG, press the buttons, or tap the indicators ("icons") directly.
+Show Panorama: Will display a +-500KHz spectrum around the tuned frequency ONLY when the squelch is closed. 
+Squelch must be adjusted "sharp" so that it  opens when there is a signal at the tuned frequency.  
+If a signal on the center frequency does not open the squelch, multiple erroneous peaks will be shown. 
 
 Display noise: At some frequencies periodic noise caused by the display updates can be present. On the main screen, press "More" and the display will be frozen. 
 Tap the empty black area to go back to the main screen. Good grounding practices and strong decoupling of the different supply voltages will reduce display and I2C noise.
@@ -350,46 +352,79 @@ Tap the empty black area to go back to the main screen. Good grounding practices
 If the max gain is set too high, intermoduation will appear. If the max gain is too low, the receiver will lose sensitivity. Good vaules for max gain are between 20 and 35. 
 The tuner AGC will lower the gain automatically if a strong signal has been received.
 
-Analog meters: If analog meters are enabled, in order to tune down/up,please press the frequency display left or right 
-If a hardware NBFM demodulator is installed, the upper meter will show the frequency deviation of the signal.
+Analog meters: If a hardware NBFM demodulator is installed, the upper meter will show the signal frequency deviationrelative to tuned frequency.
 Touch the upper meter to enable AFC in AM or NBFM. The AFC is not sticky and will auto disable everytime SSB or CW mode is selected.
+
+Frequency digits: Tap upper/lower half to change value. "Invisible" digits can be tapped as well.
+
+Search EiBi: Will search the Eibi shortwave station list for matching entries. If time matches currently active stations will be displayed in green. 
+
+WiFi Interface (More ->  Web Tools -> WiFi Interf.: While running disables other functions due to memory constraints. Once activated will stay active until a new session gets started.
+Open the IP shown in the first screen to remote control the receiver.
+
+Audio DSP: Invokes a digital audio processor. Due to the tight timing required, the audio processor can only run in it's own window. Tuning via encoder stays activated. 
+PR4, the trimpot connected to GPIO 26, will adjust the audio volume. If the audio sounds dull, reduce C11.
+
+
+
+Screen indicators that change parameters when tapped:
+
+Frequency display: Tap upper or lower part of a digit to change fequency.
+Step display: Tap left/right to change frequency one step up or down. Hold to accelerate. Same as UP/DOWN buttons.
+S-Meter: Tap to activate audio waterfall. Waterfall will disappear when freq changes and appear again after 1 minute of inactivity. Not sticky.
+Tuning meter (hardware NBFM demodulator needed): Tap to enable AFC in AM/FM. AFC is not sticky.
+Mode indicator: Tap to change between main modulation types.
+Bandwith indicator: Tap l/r to change bandwidth.
+IF filter indicator: Tap to change crystal filter bandwidth.
+AGC/Attn. indicator: Tap l/r to change SI4732 agc/attenuation. AM only.
+Debug information in the lower left corner: Tap to hide/unhide it.
+Miniwindow (bottom center): Tap to change presentation or hide it.
+Signal strength history (bottom right). Tap to hide/unhide.
+
 
 */
 
 // Libraries and headers:
-
 // Built-in
-#include <Arduino.h>           // Core Arduino framework
-#include <driver/gptimer.h>    // ESP-IDF driver (part of ESP32 core)
-#include <FS.h>                // File system abstraction (ESP32 core)
-#include <HTTPClient.h>        // HTTP client (ESP32 core)
-#include <LittleFS.h>          // LittleFS support (ESP32 core)
-#include <Preferences.h>       // NVS storage (ESP32 core)
-#include <SPI.h>               // SPI bus (Arduino core)
-#include <stdint.h>            // Standard C header
-#include <stdio.h>             // Standard C header
-#include <string.h>            // Standard C header
-#include <unordered_map>       // Standard C++ STL
-#include <vector>              // Standard C++ STL
-#include <WiFi.h>              // Wi-Fi (ESP32 core)
-#include <WiFiClient.h>        // TCP client (ESP32 core)
-#include <WiFiClientSecure.h>  // Secure TCP client (ESP32 core)
-#include <Wire.h>              // I²C bus (Arduino core)
-#include <WebServer.h>         // Web server (ESP32 core)
-#include "SD.h"                // SD card support (ESP32 core)
+#include "time.h"                 // Core Arduino framework
+#include <Arduino.h>              // Core Arduino framework
+#include <driver/gptimer.h>       // ESP-IDF driver (part of ESP32 core)
+#include <FS.h>                   // File system abstraction (ESP32 core)
+#include <HTTPClient.h>           // HTTP client (ESP32 core)
+#include <LittleFS.h>             // LittleFS support (ESP32 core)
+#include <Preferences.h>          // NVS storage (ESP32 core)
+#include <SPI.h>                  // SPI bus (Arduino core)
+#include <stdint.h>               // Standard C header
+#include <stdio.h>                // Standard C header
+#include <string.h>               // Standard C header
+#include <unordered_map>          // Standard C++ STL
+#include <vector>                 // Standard C++ STL
+#include <WiFi.h>                 // Wi-Fi (ESP32 core)
+#include <WiFiClient.h>           // TCP client (ESP32 core)
+#include <WiFiClientSecure.h>     // Secure TCP client (ESP32 core)
+#include <WiFiUdp.h>              // UDP streamer (ESP32core)
+#include <Wire.h>                 // I²C bus (Arduino core)
+#include <WebServer.h>            // Web server (ESP32 core)
+#include "SD.h"                   // SD card support (ESP32 core)
+#include "esp_adc/adc_oneshot.h"  // ESP‑IDF ADC driver (core)
 
 // Needs to be installed separately (via Arduino Library Manager or GitHub)
-#include <TFT_eSPI.h>      // Library Manager: "TFT_eSPI" by Bodmer
-#include <TFT_eSPI_ext.h>  // GitHub only: https://github.com/FrankBoesing/TFT_eSPI_ext
-#include <font_Arial.h>    // Comes with TFT_eSPI_ext repo
-#include <JPEGDecoder.h>   // Library Manager: "JPEGDecoder" by Bodmer
-#include <PNGdec.h>        // Library Manager: "PNGdec" by Larry Bank
-#include <si5351.h>        // Library Manager: "Si5351Arduino" by Jason Milldrum
-#include "arduinoFFT.h"    // Library Manager: "arduinoFFT" by kosme
-#include "DacESP32.h"      // Library Manager: "DacESP32" (ESP32 DAC audio library)
-#include "Rotary.h"        // Library Manager: "Rotary Encoder" by Brian Low
-#include "SI4735.h"        // Library Manager: "SI4735" by Ricardo Caratti
-#include <SdFat.h>         // Library Manager: "SdFat" by Bill Greiman
+#include <TFT_eSPI.h>         // Library Manager: "TFT_eSPI" by Bodmer
+#include <JPEGDecoder.h>      // Library Manager: "JPEGDecoder" by Bodmer
+#include <PNGdec.h>           // Library Manager: "PNGdec" by Larry Bank
+#include <si5351.h>           // Library Manager: "Si5351Arduino" by Jason Milldrum
+#include "arduinoFFT.h"       // Library Manager: "arduinoFFT" by kosme
+#include "DacESP32.h"         // Library Manager: "DacESP32" (ESP32 DAC library)
+#include "Rotary.h"           // Library Manager: "Rotary Encoder" by Brian Low
+#include "SI4735.h"           // Library Manager: "SI4735" by Ricardo Caratti
+#define DISABLE_FS_H_WARNING  // Needed to disable warning caused by SdFat.h, "type File not defined".
+#include <SdFat.h>            // Library Manager: "SdFat" by Bill Greiman
+
+#include <ESPAsyncWebServer.h>  // Install from Github: https://github.com/ESP32Async/ESPAsyncWebServer, also install dependency https://github.com/ESP32Async/AsyncTCP
+#include <TFT_eSPI_ext.h>       // Install from Github:  https://github.com/FrankBoesing/TFT_eSPI_ext
+
+
+
 
 // Project-specific (local headers included with project)
 #include "patch_full.h"  // Project-specific SSB patch
@@ -397,57 +432,48 @@ Touch the upper meter to enable AFC in AM or NBFM. The AFC is not sticky and wil
 #include "nxfont24.h"    // Project-specific nixie font
 #include "logSerial.h"   // Project-specific logging
 #include "Config.h"      // Project-specific macros and globals
+#include <font_Arial.h>  // Comes with TFT_eSPI_ext repo
 
 //##########################################################################################################################//
 //CODE START
-//##########################################################################################################################//
-/*
 
-// Timer interrupt handler currently not in use
-static bool IRAM_ATTR timer_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t* edata, void* user_ctx) {
 
-  Serial_printf("%ld\n", millis());
-  return true;  // return  need to yield at the end of ISR
+void IRAM_ATTR processAudio() {  //audio sampler and player, samples 8bit unsigned every 125 uS into frame[] and/or plays from playBuffer[]
+                                 // can play and sample simultaneously
+  audioTicks++;
+
+  if (bufferPlaying) {
+    dac2.outputVoltage(playBuffer[playIndex++]);  // this call is ISR save
+
+
+    if (playIndex >= audioBufSize) {  // 512
+      playIndex = 0;
+      bufferPlaying = false;  // finished this buffer
+    }
+  }
+
+  if (bufferFilled)  //frame[] full
+    return;
+
+  adc_oneshot_read(adc1_handle, ADC_CHANNEL_0, &raw36);  //read GPIO36
+
+  int32_t s = (int32_t)(raw36 - gpio36_Offset);
+
+  s = (s * 127) >> 10;  // use multiplication to avoid asymmetric clipping
+
+  if (s < -127) s = -127;  //clamp
+  else if (s > 127) s = 127;
+
+  // Convert to unsigned
+  uint8_t v = (uint8_t)(s + 127);
+
+  frame[frameIndex++] = v;
+  if (frameIndex >= audioBufSize) {  //audioBufSize changes btw 255 and 4095. bigger reduces clicking caused by scriptprocessor. smaller reduces audio lag.
+    frameIndex = 0;
+    bufferFilled = true;  // set flag
+  }
 }
 
-//##########################################################################################################################//
-
-void startHWT() {  // initiate the HW timer. Currently not in use, left code for future use
-  gptimer_config_t timer_config = {
-    .clk_src = GPTIMER_CLK_SRC_DEFAULT,
-    .direction = GPTIMER_COUNT_UP,
-    .resolution_hz = 1 * 1000 * 1000,  // 1MHz resolution (1 tick = 1us)
-  };
-
-  // Create timer
-  ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &gptimer));
-
-  // Set alarm callback
-  gptimer_event_callbacks_t cbs = {
-    .on_alarm = timer_isr,
-  };
-  ESP_ERROR_CHECK(gptimer_register_event_callbacks(gptimer, &cbs, NULL));
-
-  // Enable timer
-  ESP_ERROR_CHECK(gptimer_enable(gptimer));
-
-  // Configure alarm
-  gptimer_alarm_config_t alarm_config = {
-    .alarm_count = 120000 * 1000,  // 2min in us (at 1MHz resolution)
-    .reload_count = 0,
-    .flags = {
-      .auto_reload_on_alarm = true,
-    },
-  };
-  ESP_ERROR_CHECK(gptimer_set_alarm_action(gptimer, &alarm_config));
-
-  // Start timer
-  ESP_ERROR_CHECK(gptimer_start(gptimer));
-
-  Serial_println("HW timer started");
-}
-
-*/
 //##########################################################################################################################//
 
 void IRAM_ATTR RotaryEncFreq() {  // rotary encoder interrupt handler
@@ -472,12 +498,15 @@ void IRAM_ATTR handlePulse() {
 
 //##########################################################################################################################//
 
+
+
 void setup() {
 
   Wire.begin(ESP32_I2C_SDA, ESP32_I2C_SCL, I2C_BUSSPEED);
+  init_ADC_Oneshot();                // use IDF ADC API instead of analogReaad()
+  startAudioSampler();               // ISR for audio buffer , load AFTER ADC init
   preferences.begin("data", false);  // preferences namespace is data. Needs to be loaded before bootscreen
   Serial.begin(115200);
-  //startHWT();  // not used in this version
   pinMode(ENCODER_PIN_A, INPUT_PULLUP);  // encoder needed for touch calibration
   pinMode(ENCODER_PIN_B, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_A), RotaryEncFreq, CHANGE);
@@ -486,8 +515,6 @@ void setup() {
   bootScreen();
   etft.TTFdestination(&tft);  // Additional fonts
   etft.setTTFFont(Arial_13);
-
-
   uint16_t calData[5] = { // values for display 3.5
                           (uint16_t)preferences.getInt("cal0", 323),
                           (uint16_t)preferences.getInt("cal1", 3305),
@@ -503,7 +530,7 @@ void setup() {
   loadLastSettings();  // load settings from flash
   drawFrame();
   spriteBorder();
-  pinMode(RELAY_SWITCH_OUTPUT, OUTPUT);  // pin for IF relay and to enable tuner voltage
+  pinMode(RELAY_SWITCH_OUTPUT, OUTPUT);  // pin for relays and to enable tuner voltage
   pinMode(TUNER_AGC_PIN, OUTPUT);
   pinMode(NBFM_MUTE_PIN, OUTPUT);
   pinMode(MUTEPIN, OUTPUT);
@@ -527,10 +554,12 @@ void setup() {
   Serial.setTimeout(5);  // do not wait, if the TSA does not answer quickly
   tinySAInit();
 #endif
+
+  if (ssid.length() > 0)                         //An SSID is configured
+    WiFi.begin(ssid.c_str(), password.c_str());  // establish a temporary connection to load current time
 }
 
 //##########################################################################################################################//
-
 
 void loop() {
 
@@ -539,96 +568,131 @@ void loop() {
   if (FREQ != FREQ_OLD) {
     FREQCheck();         //check whether within FREQ range
     displayFREQ(FREQ);   // display new FREQ
-    setLO();             // and tune it in
-    resetSmeter = true;  // reset to zero
+    setFreq();           // and tune it in
+    resetSmeter = true;  // reset  S Meterto zero
     autoloopBands();     // if autoloop is enabled frequency will stay within a selected band
     FREQ_OLD = FREQ;
-   //Serial.print("FREQ has changed\n");
+    //Serial.print(F("FREQ has changed\n");
   }
 
 
-  getRSSIAndSNR();  // get RSSI (signalStrength) and SNR, valid for all functions in the main loop
 
-  displaySTEP(false);  // check STEP
 
-  readSquelchPot(true);  // true = read and draw position circle
-  setSquelch();
-  fineTune();  // read frequency potentiometer
+  if (!streamAudio) {  // streaming audio needs all available resources,  shorten main loop when active
+
+    if (enableRigCtl)  // basic CAT control via USB serial
+      rigCtl();
+
+    getRSSIAndSNR();  // get RSSI (signalStrength) and SNR, valid for all functions in the main loop
+
+    displaySTEP(false);  // check STEP
+
+    readSquelchPot(true);  // true = read and draw position circle
+    setSquelch();
+    fineTune();  // read frequency potentiometer
 
 #ifdef TV_TUNER_PRESENT
-  setTunerAGC(true);  // TV tuner AGC reduces tuner gain for better IP3, shows value in the Tuner Gain tile
+    setTunerAGC(true);  // TV tuner AGC reduces tuner gain for better IP3, shows value in the Tuner Gain tile
 #endif
 
 #ifdef SW_ATTENUATOR_PRESENT
-  if (!TVTunerActive)
-    setShortwaveAGC();  // shortwave AGC
+    if (!TVTunerActive)
+      setShortwaveAGC(true);  // shortwave AGC
 #endif
 
-  saveCurrentSettings();  // save settings after 1 minute if freq has not changed
+    saveCurrentSettings();  // save settings after 1 minute if freq has not changed
 
-  // functions that don't have to run in every loop cycle get called with fTrigger
 
-  if (fTrigger % 3 == 0) {
+    // functions that don't have to run in every loop cycle get called with fTrigger
 
-    checkTouchCoordinates();  // this function takes long. Calling it 1 out of 3 loop cycles is suficient.
+    if (fTrigger % 3 == 0) {
+
+
+
+      checkTouchCoordinates();  // this function takes long. Calling it 1 out of 3 loop cycles is suficient.
+
 #ifdef NBFM_DEMODULATOR_PRESENT
-    getDiscriminatorVoltage();  // display Tuning meter
+      getDiscriminatorVoltage();  // display Tuning meter
 
 #else
-    if (dBm < 0 && (!scanMode) && showMeters)
-      plotNeedle(signalStrength - RFGainCorrection, 2);  // update the SMeter needle
+      if (dBm < 0 && (!scanMode) && showMeters)
+        plotNeedle(signalStrength - SWGainCorrection, 2);  // update the SMeter needle
 #endif
 
-    setMode();     //  set mode (tune or scan mode), must run after checkTouchCoordinates().
-    touchTuner();  // graphical frequency display, switches to selected FREQ when touched
-
-    RSSITrace();   // show a rolling signal strength trace in the lower right infobar area
-    mainScreen();  // build main window
-  }
 
 
-  if (fTrigger % 8 == 0 && disableFFT == false) {  // spectrum eats a lot of processing resources
-    loadPanoramaScan(false);  // scans +-500 KHz around current frequency when squelch is closed (AM/FM only)
-    audioSpectrum();
-    if (enableAnimations && funEnabled)
-      pacM(true);
+      setMode();  //  set mode (tune or scan mode), must run after checkTouchCoordinates().
 
-    displaySmeterBar(2);  // // update the SMeter bar, so that it moves fluently btw reads
-    if (showMeters) {
-      int vol = FFTAccum / 1000;
-      if (!audioMuted)
-        plotNeedle2(vol, 3);
-      else
-        plotNeedle2(1, 0);
+      if (!webIFActive)
+        RSSITrace();  // show a rolling signal strength trace in the lower right infobar area
+
+      notifyClients();  // web interface, send server changes to client (S Meter + FREQ) )
+      mainScreen();     // build main window if needed
     }
-  }
+
+
+
+
+
+    if (fTrigger % 12 == 0 && !disableFFT && !webIFActive) {
+
+      audioSpectrum();
+
+      loadPanoramaScan(false);  // scans +-500 KHz around current frequency when squelch is closed (AM/FM only)
+      if (enableAnimations && funEnabled)
+        pacM(true);
+
+      displaySmeterBar(4);  // // update the SMeter bar, so that it moves fluently btw reads
+      if (showMeters) {
+        if (!audioMuted)
+          plotNeedle2(currentVU, 3);
+        else
+          plotNeedle2(1, 0);
+      }
+    }
+
 
 
 #ifdef TINYSA_PRESENT
-  if (fTrigger % 15 == 0) {
-    synctinySA();  // tinySA synchronisation
-  }
+    if (fTrigger % 15 == 0) {
+      synctinySA();  // tinySA synchronisation
+    }
 #endif
 
 
+    if (fTrigger % 50 == 0) {
 
-  if (fTrigger % 50 == 0) {
+      if (modeChangeRequested) {  //web interface,  client requested modulation change
+        modeChangeRequested = false;
+        modType = newMode;
+        loadSi4735parameters();  // must be single threaded, do not mix with webserver thread
+        printModulation();
+        if (wasStreaming) {  //reactivate streaming
+          streamAudio = true;
+          wasStreaming = false;
+        }
+      }
 
-    if (syncEnabled == false || tinySAfound == false)
-      calculateAndDisplaySignalStrength();  // Smeter,  alternatively gets called from convertTodBm(),when tinySA provides signal level
-    displayLOFreq();     // display in lower left corner
-    slowTaskHandler();  // run tasks with a long period
-    fTrigger = 0;
-    disableFFT = false;
+      if (syncEnabled == false || tinySAfound == false)
+        calculateAndDisplaySignalStrength();  // Smeter,  alternatively gets called from convertTodBm(),when tinySA provides signal level
+
+      displayLOFreq();    // display in lower left corner
+      slowTaskHandler();  // run tasks with a long period
+      fTrigger = 0;
+      disableFFT = false;
+    }
+
+
+    fTrigger++;     // function trigger counter, triggers functions that should not run every loop cycle
+    if (loopDelay)  // prevents the main loop from running faster than 10ms since several functions would then run too fast
+      delay(loopDelay);
   }
 
+  else {
 
-
-  fTrigger++;  // function trigger counter, triggers functions that should not run every loop cycle
-
-
-  if (loopDelay)  // prevents the main loop from running faster than 10ms since several functions would then run too fast
-    delay(loopDelay);
+    streamAudioLoop();
+    // streamAudio active
+  }
 }
 //##########################################################################################################################//
 
@@ -638,12 +702,19 @@ void encoderMoved() {
   use1MhzEncoderStep();  // change FREQ in 1MHZ segments if encoder pressed
 
   if (encLockedtoSynth) {  // if encoder is used to change FREQ
+
+
     if (clw) {
-      disableFFT = true;  // disable spectrum analyzer when moving encoder to make tuning more responsive
-      enableAnimations = false;
+      disableFFT = true;         // disable spectrum analyzer when moving encoder to make tuning more responsive
+      enableAnimations = false;  //
       FREQ += STEP;
+      checkRFModeChange();  // check whether FREQ moved from SW to VHF/UHF or viceversa;
       clw = false;
-    } else if (cclw) {
+    }
+
+    else if (cclw) {
+      if (clw + cclw)
+        checkRFModeChange();
       disableFFT = true;
       enableAnimations = false;
       FREQ -= STEP;
@@ -662,7 +733,7 @@ void FREQCheck() {  // error check and eliminate rounding error when keypad is u
     FREQ = MAX_FREQ;
 
 
-  if (FREQ % 10 >= 8 || FREQ % 10 <= 2) {  // eliminate frequency rounding errors. Keypad entry uses floats, so rounding errors may come up
+  if (FREQ % 10 >= 8 || FREQ % 10 <= 2) {  // eliminate frequency rounding errors. Keypad entry uses floats, so Hz rounding errors may come up
     long lowerEnd = (FREQ / 10) * 10;
     long upperEnd = lowerEnd + 10;
 
@@ -690,7 +761,6 @@ void displayFREQ(long freq) {
     return;
   }
 
-
   long old_Mhz = oldFreq / 1000000;
   long old_Khz = (oldFreq - (old_Mhz * 1000000)) / 1000;
   long old_Hz = (oldFreq - (old_Mhz * 1000000)) - old_Khz * 1000;
@@ -705,7 +775,7 @@ void displayFREQ(long freq) {
 
   if (oldFreq != freq) {  // overwrite digits that have changed
     if (old_Mhz != new_Mhz)
-      tft.fillRect(xPos, yPos, 155, 34, TFT_BLACK);
+      tft.fillRect(xPos - 4, yPos, 160, 34, TFT_BLACK);
 
     if (old_Khz != new_Khz)
       tft.fillRect(xPos + 75, yPos, 87, 34, TFT_BLACK);
@@ -731,7 +801,7 @@ void displayFREQ(long freq) {
   etft.printf("%03ld", new_Hz);
   etft.setTTFFont(Arial_32);
   etft.setCursor(xPos + 208, yPos);
-  etft.print(" MHz");
+  etft.print(F(" MHz"));
 
   oldFreq = freq;
 }
@@ -740,7 +810,7 @@ void displayFREQ(long freq) {
 void colorSelector() {  // set frequency display colors
 
 #ifdef TV_TUNER_PRESENT
-  if (FREQ < SHORTWAVE_MODE_UPPER_LIMIT) {
+  if (FREQ <= SHORTWAVE_MODE_UPPER_LIMIT) {
     etft.setTextColor(TFT_GREEN);  // shortwave normal color
     tft.setTextColor(TFT_GREEN);
   } else {
@@ -781,13 +851,13 @@ void displaySTEP(bool update) {
   if (useNixieDial)  // no room to display step
     return;
 
+
   static uint32_t OLD_STEP;
 
   if (OLD_STEP == STEP && !update)
     return;
   else
     OLD_STEP = STEP;
-
 
 
   if (use1MHzSteps == true)
@@ -804,7 +874,7 @@ void displaySTEP(bool update) {
   tft.setTextSize(2);
 
   if (modType == WBFM) {
-    tft.print("Step:100KHz");
+    tft.print(F("Step:100KHz"));
     return;
   }
 
@@ -814,6 +884,8 @@ void displaySTEP(bool update) {
     tft.printf("Step:%ldKHz", STEP / 1000);
   else if (STEP >= 1000000)
     tft.printf("Step:%ldMHz", STEP / 1000000);
+
+  tft.setTextColor(textColor);
 }
 
 //##########################################################################################################################//
@@ -900,13 +972,13 @@ void roundFreqToSTEP() {  // round  FREQ up or down to the next STEP when STEP o
 
 
   if (modType == AM) {             // Not SSB orNBFM
-    if ((FREQ / 1000) % 10 > 5) {  // round 6 - 9 up
+    if ((FREQ_TO_KHZ) % 10 > 5) {  // round 6 - 9 up
       FREQ /= STEP;
       FREQ *= STEP;
       FREQ += STEP;
     }
 
-    if ((FREQ / 1000) % 10 < 5)  // round 1 - 4 down
+    if ((FREQ_TO_KHZ) % 10 < 5)  // round 1 - 4 down
     {
       FREQ /= STEP;
       FREQ *= STEP;
@@ -916,7 +988,18 @@ void roundFreqToSTEP() {  // round  FREQ up or down to the next STEP when STEP o
 
 //##########################################################################################################################//
 
+void roundFREQUpDown(uint32_t stp) {  // round up/down to stp
 
+
+  uint32_t down = (FREQ / stp) * stp;  // round up or down logic
+  uint32_t up = ((FREQ + stp - 1) / stp) * stp;
+  if ((FREQ - down) <= (up - FREQ))
+    FREQ = down;
+  else
+    FREQ = up;
+}
+
+//##########################################################################################################################//
 
 void drawButton(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color1, uint32_t color2) {  // draws buttons as plain rectangles or push bitmaps
 
@@ -1016,10 +1099,10 @@ Button positions:
 
 
 void calculateAndDisplaySignalStrength() {  // gets called from main loop, or optionally from the tinySA handler
-  // needed for squelch even when tinySA is  signal strength source
+  // needed for squelch even when tinySA is the signal strength source
 
   if (signalStrength < 8 && !TVTunerActive) {
-    //  Shortwave modes start with signalStrength 6 (mixer noise). Reduce
+    //  Shortwave mode start with signalStrength 6 (mixer noise). Reduce
     signalStrength -= 5;
     SNR = 0;
   }
@@ -1027,45 +1110,42 @@ void calculateAndDisplaySignalStrength() {  // gets called from main loop, or op
 
   //Serial_printf("SignalStrength:%d SNR:%d\n", signalStrength, SNR);
 
-  if ((!syncEnabled) || (!TSAdBm) || (FREQ >= 350000000l)) {  // calculate dBm from RSSI when no data from tinySA or FREQ above 350 MHz
-    // Convert dBµV to dBm  and substract gain from LNA
-    dBm = signalStrength - 107 - RFGainCorrection;
+  if ((!syncEnabled) || (!TSAdBmValue) || (FREQ >= 350000000l)) {  // calculate dBm from RSSI
+
+    tft.setTextColor(TFT_YELLOW);
+
+    if (!TVTunerActive)
+      dBm = signalStrength - 107 + SWGainCorrection;  // Convert dBµV to dBm  and corrects sMeter and dBm values in shortwave mode.
+
+    else
+      dBm = signalStrength - 107 + tunerGainCorrection;  // corrects sMeter and dBm values when tuner is in use. Behaviour is non linear due to agc kicking in
+
   }
 
 
-  if (syncEnabled && TSAdBm) {
+  else if (syncEnabled && TSAdBmValue) {  //use dBm value extracted from tinySA marker 1
     tft.setTextColor(TFT_GREEN);
-    dBm = TSAdBm;  //take dBm from TSA marker 1
+    dBm = TSAdBmValue;
   }
 
-  if (TVTunerActive && !TSAdBm && modType != WBFM) {
-    dBm -= tunerGain - ((180 - initialGain) / 4);  // this roughly corrects if the tuner gain gets already reduced without siggnal to reduce crossmodulation
-    dBm += tunerdBmcorrection;
 
-
-    //DAC level vs tuner attenuation: 255 = 0dB, 159  = - 10dB, 145 = -20dB, 129 = -30dB, 105 = -40dB attenuation. Attenuation kicking in at around 180
-  }
-
-  double power_watts = pow(10.0, dBm / 10.0) * 1e-3;
-  double voltage_rms = sqrt(power_watts * 50.0);  // 50Ohms
-  microVolts = voltage_rms * 1e6;
-
-  if (!useNixieDial) {
+  if (!useNixieDial && TSAdBmValue) {
     tft.fillRect(330, 4, 145, 22, TFT_BLACK);
-    tft.setCursor(345, 8);
   }
 
-  if (showMeters && useNixieDial && !scanMode) {
+  if (showMeters && useNixieDial && !scanMode) {  // smallmicrovolts display at the bottom of lower meter
     tft.setTextSize(1);
-    tft.setTextColor(TFT_GREEN);
     tft.fillRect(390, 115, 70, 8, TFT_BLACK);
     tft.setCursor(390, 115);
   }
 
 
 
-  if (TSAdBm && syncEnabled) {  // only values from the tinySA are precise, RSSI from SI4732 depends on AGC
+  if (TSAdBmValue && syncEnabled) {  // only values from the tinySA are precise, RSSI from SI4732 depends on AGC
 
+    tft.setCursor(345, 6);
+    tft.setTextColor(TFT_GREEN);
+    microVolts = 223606.8 * pow(10.0, dBm / 20.0);  // 50 Ohms formula from Google
 
     if (microVolts < 10000)
       tft.printf("%5.1fuV", microVolts);
@@ -1076,7 +1156,6 @@ void calculateAndDisplaySignalStrength() {  // gets called from main loop, or op
 
   tft.fillRect(288, 62, 49, 28, TFT_BLACK);
 
-  tft.setTextColor(TFT_GREEN);
   tft.setTextSize(1);
 
   tft.setCursor(295, 64);
@@ -1093,134 +1172,88 @@ void calculateAndDisplaySignalStrength() {  // gets called from main loop, or op
 //##########################################################################################################################//
 
 void displaySmeterBar(int updateRate) {
+  const int maxX = 290;
+  int spoint, sVal;
 
-  const int maxX = 300;
-  int newSpoint = 0;
+  if (TSAdBmValue && syncEnabled) {
 
-  int spoint = (int)calculateSpoint(microVolts);
+    if (!TVTunerActive)
+      sVal = signalStrength - 107 + SWGainCorrection;  // use signalStrength for S meter bar. S meter overshoots until AGC kicks in. May need rework.
+
+    else
+      sVal = signalStrength - 107 + tunerGainCorrection;  //
+
+  }
+
+  else
+    sVal = dBm;  // use the previously calculated dBm value
+
+  spoint = maxX - 2 * abs(sVal);  // scale to s meter x range
+
+
 
   static int oldSpoint = spoint;
 
-  if (spoint > maxX)  // limit
-    spoint = maxX;
+  spoint = constrain(spoint, 0, maxX);  // limit
 
-
-  if (spoint < oldSpoint) {  // When signal is decreasing
-                             // Calculate new endpoint (not below current spoint)
-
-    int diff = oldSpoint - spoint;
-
-    if (diff < 10 * updateRate)
-      newSpoint = oldSpoint - updateRate;
-
-    else
-      newSpoint = oldSpoint - 5 * updateRate;
-
-
+  //sig decrease
+  if (spoint < oldSpoint) {
+    int newSpoint = oldSpoint - updateRate;
     if (newSpoint < spoint)
       newSpoint = spoint;
 
+    // Overwrite btw new and old bar ends
+    tft.fillRect(Xsmtr + 3 + newSpoint, Ysmtr + 13, oldSpoint - newSpoint, 15, TFT_BLACK);
 
-    tft.fillRect(newSpoint, Ysmtr + 13, maxX - newSpoint, 15, TFT_BLACK);
-
-    oldSpoint = newSpoint;  // Update the position
+    oldSpoint = newSpoint;
   }
-  if (resetSmeter) {  // when frequency changes, do not decay slowly
-    oldSpoint = 0;
+
+  if (resetSmeter) {  // used when FREQ has changed
+    tft.fillRect(Xsmtr + 3, Ysmtr + 13, maxX, 15, TFT_BLACK);
+    oldSpoint = spoint - updateRate;  // trigger a new bar
     resetSmeter = false;
   }
 
 
+  // sig increase
   if (spoint > oldSpoint) {
-
     int diff = spoint - oldSpoint;
-
     if (diff > 10 * updateRate)
-      oldSpoint += 10 * updateRate;  // start fast if the difference is big
-
+      oldSpoint += 5 * updateRate;  // fast start
     else
-      oldSpoint += updateRate;  // slow down when getting close
+      oldSpoint += 2 * updateRate;  // slow last part
 
+    if (oldSpoint > spoint) oldSpoint = spoint;
 
-    int tik = 0;
-    uint8_t red, green, blue;
-
-
-    while (tik < oldSpoint) {  // now start to draw the bars
+    // Draw bar until oldSpoint
+    for (int tik = 0; tik < oldSpoint; tik++) {
+      uint8_t red, green, blue;
       if (tik > 180) {
-        // Fade smoothly from green (0,63,0) to white (31,63,31)
-        float progress = (float)(tik - 180) / (oldSpoint - 180);  // 0.0 to 1.0
-        red = (int)(31 * progress);                               // Red fades in (0→31)
-        green = 63;                                               // Green  max (63)
-        blue = (int)(31 * progress);                              // Blue fades in (0→31)
+        float progress = (float)(tik - 180) / (oldSpoint - 180);
+        red = (int)(31 * progress);
+        green = 63;
+        blue = (int)(31 * progress);
       } else if (tik <= 90) {
-        // red → orange → yellow
         red = 31;
         green = (63 * tik) / 90;
         blue = 0;
-      } else if (tik <= 180) {
-        //yellow → green
+      } else {  // 90–180
         red = 31 - (31 * (tik - 90)) / 90;
         green = 63;
         blue = 0;
       }
 
-      // Pack into RGB565
-
-      uint16_t rgb565;
-      if (tik % 3 == 0)
-        rgb565 = 0;
-      else
-        rgb565 = (red << 11) | (green << 5) | blue;
-
-      tft.fillRect(Xsmtr + 3 + tik, Ysmtr + 23 - tik / 25, 1, 4 + tik / 25, rgb565);
-      tik++;
-    }
-
-  }  // endif (spoint > oldSpoint)
-}
-
-//##########################################################################################################################//
-
-float calculateSpoint(float vRef) {
-  struct Point {
-    float v;
-    float s;
-  };
-
-  const Point points[] = {
-    { 0.0, 1 },
-    { 0.1, 10 },
-    { 0.2, 20 },
-    { 0.4, 40 },
-    { 0.8, 60 },
-    { 1.6, 80 },
-    { 3.2, 120 },
-    { 6.4, 140 },
-    { 12.8, 160 },
-    { 25.6, 180 },
-    { 51.2, 200 },
-    { 160, 230 },
-    { 500, 260 },
-    { 501, 280 }  // anything > 500
-  };
-
-  const int numPoints = sizeof(points) / sizeof(points[0]);
-
-  if (vRef <= points[0].v) return points[0].s;
-
-  for (int i = 1; i < numPoints; i++) {
-    if (vRef <= points[i].v) {
-      // Linear interpolation between this point and previous
-      float t = (vRef - points[i - 1].v) / (points[i].v - points[i - 1].v);
-      return points[i - 1].s + t * (points[i].s - points[i - 1].s);
+      uint16_t rgb565 = (tik % 3 == 0) ? 0 : (red << 11) | (green << 5) | blue;
+      tft.fillRect(Xsmtr + 3 + tik, Ysmtr + 23 - tik / 25,
+                   1, 4 + tik / 25, rgb565);
     }
   }
-
-  return points[numPoints - 1].s;
 }
 
+
+
 //##########################################################################################################################//
+
 void DrawSmeterScale() {
 
   String IStr;
@@ -1236,9 +1269,9 @@ void DrawSmeterScale() {
 
   for (int i = 1; i < 5; i++) {
     IStr = String(i * 10);
-    tft.setCursor((Xsmtr + 165 + (i * 15) * 1.3), Ysmtr + 5);
-    if ((i == 2) or (i == 4) or (i == 6)) {
-      tft.print(" +");
+    tft.setCursor((Xsmtr + 165 + (i * 17) * 1.3), Ysmtr + 5);
+    if ((i == 2) or (i == 4)) {
+      tft.print(F(" +"));
       tft.print(i * 10);
     }
   }
@@ -1249,26 +1282,111 @@ void DrawSmeterScale() {
 
 void slowTaskHandler() {  // handles tasks with a long period. not precise.
 
-  static unsigned int aTmr = 0;              // animation timer
+#define WIFI_STARTUP_TIME 3
+
+  static uint32_t sTmr = 0;                  //  seconds timer, not precise
   static unsigned int gpio36_OffsetTmr = 0;  // recalibrate analogRead(AUDIO_INPUT_PIN);
-  static unsigned long tmr = 0;
-  const unsigned int tInt = 1000;  // 1000 ms
+  static uint32_t tmr = 0;
+  const uint16_t tInt = 1000;  // 1000 ms
   static bool done = false;
-
-
+  static bool wFinished = false;
+  static bool timeInit = false;
+  static uint8_t reconnects = 5;
 
   if (displayDebugInfo)
     loopTimer();
+
+
   if (millis() - tmr >= tInt) {
     tmr = millis();
     gpio36_OffsetTmr++;
-    aTmr++;
+    sTmr++;
   }
   //Serial.printf("RSSI:%ddBuV Frequency:%ld\n", signalStrength, FREQ);
+  if (sTmr > WIFI_STARTUP_TIME && !wFinished && ssid.length() > 0) {  // SSID is configured, connect and check connection
+
+    tft.fillRect(0, 308, 135, 12, TFT_BLACK);
+    tft.setCursor(0, 311);
+    tft.setTextSize(1);
+
+    if (WiFi.status() != WL_CONNECTED) {
+      if (reconnects < 5) {
+        Serial.printf("Reconnecting WiFi! Attempt %d\n", reconnects);
+        if (ssid.length() > 0) {
+          if (password.length() > 0) {
+            WiFi.begin(ssid.c_str(), password.c_str());
+          } else {
+            WiFi.begin(ssid.c_str());  // no pw
+          }
+        }
+        reconnects++;
+        return;
+
+      } else {
+        wFinished = true;
+        tft.fillRect(340, 6, 136, 16, TFT_BLACK);
+        tft.setTextSize(2);
+        tft.setCursor(340, 6);
+        tft.setTextColor(TFT_RED);
+        tft.print("No WiFi!");
+        Serial.println("No WiFi connection");
+      }
+    }
+
+    else {
+
+      Serial.printf("WiFi: Connected | RSSI: %d dBm\n", WiFi.RSSI());
+      if (!useNixieDial) {
+        tft.fillRect(340, 6, 136, 16, TFT_BLACK);
+        tft.setTextSize(2);
+        tft.setCursor(340, 6);
+        tft.setTextColor(TFT_RED);
+        tft.print("Getting UTC");
+      }
+
+      if (!timeSet) {
+
+        if (!timeInit)
+          configTime(0, 0, "pool.ntp.org", "time.nist.gov", "time.google.com");
+
+        time_t now = time(nullptr);  // low when not yet synced
+
+        if (now > 100000) {
+          getLocalTime(&timeinfo);
+          tft.fillRect(340, 6, 136, 16, TFT_BLACK);
+          tft.setCursor(340, 6);
+          timeInit = true; // synced
+        }
+
+        if (getLocalTime(&timeinfo)) {
+          Serial.print(&timeinfo, "Time: %H:%M UTC\n");
+          timeSet = true;
+          tft.fillRect(340, 6, 136, 16, TFT_BLACK);
+        }
+        wFinished = true;
+      }
+    }
+
+    if (timeSet || wFinished) {
+      WiFi.disconnect();
+      WiFi.mode(WIFI_OFF);
+      Serial.println("WiFi disabled");
+    }
+
+    tft.setTextSize(2);
+  }
+
+
+  if (timeSet)
+    showTime();
+
+
 
   if (gpio36_OffsetTmr >= 600) {  // try roughly every 10 minutes
     if (audioMuted) {
-      gpio36_Offset = analogRead(AUDIO_INPUT_PIN);  // recalibrate analogRead(AUDIO_INPUT_PIN) since it slowly drifts with temperature
+
+      adc_oneshot_read(adc1_handle, ADC_CHANNEL_0, &raw36);
+      gpio36_Offset = raw36;  // recalibrate analogRead(AUDIO_INPUT_PIN) since it slowly drifts with temperature
       gpio36_OffsetTmr = 0;
       Serial_print("gpio36 recalibrated\n");
     }
@@ -1276,7 +1394,7 @@ void slowTaskHandler() {  // handles tasks with a long period. not precise.
 
 
   if (!enableAnimations && done) {  // enableAnimations was set to false by encoder or keypress
-    aTmr = 0;
+    sTmr = 0;
     done = false;
     if (funEnabled)
       redrawMainScreen = true;
@@ -1284,11 +1402,12 @@ void slowTaskHandler() {  // handles tasks with a long period. not precise.
     tx = ty = pressed = 0;
   }
 
-  if (aTmr > TIME_UNTIL_ANIMATIONS) {  // logic to start  pacm after TIME_UNTIL_ANIMATIONS
+  if (sTmr > TIME_UNTIL_ANIMATIONS) {  // logic to start  pacm after TIME_UNTIL_ANIMATIONS
     enableAnimations = true;
     done = true;
-    if (showAudioWaterfall)  // logic to start audio eaterfall after TIME_UNTIL_ANIMATIONS
+    if (showAudioWaterfall) {  // logic to start audio eaterfall after TIME_UNTIL_ANIMATIONS
       audioSpectrum256();
+    }
   }
 }
 //##########################################################################################################################//
@@ -1303,21 +1422,22 @@ void loopTimer() {  // displays loop time and stops if from falling below 10ms
   cycleTime = now - before;
   before = now;
 
-  if (oldCycleTime == cycleTime)
+  cycleTime /= 50000l;  // convert microseconds to milliseconds and divide by 50 since it gets called only 1 out of 50 loops
+
+  if (oldCycleTime == cycleTime)  // avoid reprinting
     return;
   else
     oldCycleTime = cycleTime;
+  tft.setTextSize(1);
+  tft.fillRect(0, 308, 135, 12, TFT_BLACK);
+  tft.setCursor(0, 311);
+  tft.setTextColor(TFT_WHITE);
+  tft.printf("LOOP:%ldms HEAP:%ldK", cycleTime, ESP.getFreeHeap() / 1024);
 
 
 
-
-  etft.setTTFFont(Arial_9);
-  etft.fillRect(0, 308, 130, 12, TFT_BLACK);
-  etft.setCursor(0, 308);
-  etft.setTextColor(TFT_GREEN);
-  cycleTime /= 50000l;  // convert microseconds to milliseconds and divide by 50 since it gets called only 1 out of 50 loops
-  etft.printf("LOOP:%ldms", cycleTime);
-
+  tft.setTextColor(textColor);
+  tft.setTextSize(2);
 
   if (cycleTime < 10)  // stabilize the loop at minimum 10ms , otherwise functions that depend on the loop time may run too fast
     loopDelay++;
@@ -1327,8 +1447,6 @@ void loopTimer() {  // displays loop time and stops if from falling below 10ms
 
   if (loopDelay < 0)
     loopDelay = 0;
-
-  etft.setTextColor(textColor);
 }
 
 //##########################################################################################################################//
@@ -1340,9 +1458,11 @@ void readSquelchPot(bool draw) {  // reads value of squelch potentiometer and if
   uint8_t pot;
 
 
-  for (int l = 0; l < 10; l++)
-    val += analogRead(SQUELCH_POT);
+  for (int l = 0; l < 10; l++) {
 
+    adc_oneshot_read(adc1_handle, ADC_CHANNEL_7, &raw35);
+    val += raw35;
+  }
   pot = val / div;  // oversample and  set pot to a value from 0 to 138
 
   if (pot <= oldPot - 2 || pot >= oldPot + 2 || redrawMainScreen) {  // eliminate A/D convrter noise, update only when pot turned
@@ -1378,14 +1498,11 @@ void setSquelch() {
 
 
   if (currentSquelch > 127) {  // squelch fully closed == mute
-
     si4735.setAudioMute(true);
     si4735.setHardwareAudioMute(true);
     audioMuted = true;
     return;
   }
-
-
 
 
   if (!SNRSquelch) {  // use RSSI only as open/close criteria
@@ -1445,16 +1562,30 @@ void displayText(int x, int y, int length, int height, const char* text) {  // h
 //##########################################################################################################################//
 
 
-void indicatorTouch() {  // Change step, modulation, bandwidth, AGC by touching the indicator areas
+void indicatorTouch() {  // Change parameters by touching the indicator areas
 
   int upper_y = 65;
   int lower_y = 115;
 
-  if (ty < 35 || !pressed)  // outside of area
+  if (ty < 45 || !pressed)  // outside of area
     return;
 
+
+  if (ty > 296 && tx <= 130) {  // debug info on/off
+
+    displayDebugInfo = !displayDebugInfo;
+    preferences.putBool("dbgI", displayDebugInfo);
+    if (!displayDebugInfo) {
+      tft.fillRect(140, 132, 22, 38, TFT_BLACK);  // agc gain
+      tft.fillRect(0, 296, 130, 24, TFT_BLACK);   //infobar
+    }
+
+    tRel();
+  }
+
+
   // Toggle audio waterfall
-  if (tx < 340 && ty > 35 && ty < 85) {
+  if (tx < 340 && ty > 45 && ty < 85) {
     showAudioWaterfall = !showAudioWaterfall;
 
     if (showAudioWaterfall) {
@@ -1500,7 +1631,9 @@ void indicatorTouch() {  // Change step, modulation, bandwidth, AGC by touching 
     }
 
     if (tx > 173 && tx < 215) {
+      wideIFFilter = !wideIFFilter;
       setIFBandwidth();
+      showIFBandwidth();
       tRel();
     }
 
@@ -1550,7 +1683,10 @@ void getDiscriminatorVoltage() {
     }
 
 
-    afcVoltage = (analogRead(TUNING_VOLTAGE_READ_PIN) / 5) - discriminatorZero;  // use discriminatorZero to adjust afc meter to zero when tuned
+    afcVoltage = (analogRead(TUNING_VOLTAGE_READ_PIN) / tuningMeterDivider) - discriminatorZero;
+    // tuningMeterDivider depends on sensitivity of quadrature demodulator
+    // afcVoltage  normally btw. 1 and 2 V;
+
 
     if (afcEnable)
       setAFC(afcVoltage);
@@ -1614,7 +1750,7 @@ void showAFCStatus() {
     tft.setTextSize(1);
     tft.setTextColor(TFT_BLACK);
     tft.setCursor(350, 65);
-    tft.print("AFC");
+    tft.print(F("AFC"));
     tft.setTextColor(textColor);
     tft.setTextSize(2);
 
@@ -1625,7 +1761,7 @@ void showAFCStatus() {
     tft.setTextColor(TFT_GREEN);
     tft.setTextSize(1);
     tft.setCursor(350, 65);
-    tft.print("AFC");
+    tft.print(F("AFC"));
     tft.setTextColor(textColor);
     tft.setTextSize(2);
   }
@@ -1646,7 +1782,7 @@ void setAFC(int afcVoltage) {  // only for NBFM hardware, generates AFC voltage 
     tft.setTextColor(TFT_GREEN);  // need to reprint sice this gets overwritten when the meter gets redrawn
     tft.setTextSize(1);
     tft.setCursor(350, 65);
-    tft.print("AFC");
+    tft.print(F("AFC"));
     tft.setTextColor(textColor);
     tft.setTextSize(2);
   }
@@ -1722,51 +1858,97 @@ void hideBigBtns() {  // hide UP/DOWN/MODE or the meters
 
 //##########################################################################################################################//
 
-void setShortwaveAGC() {  // this will drive an SW attenuator and act as an AGC. SWMinAttn determines the minimum attenuation.
+void setShortwaveAGC(bool show) {  // this will drive an SW attenuator and act as an AGC. SWMin determines the minimum fixed attenuation.
 
-  static unsigned char oldRSSI = 0;
 
-  int newRSSI = 8 * signalStrength - 200;
-  newRSSI = constrain(newRSSI, 0, 255);
+  static int currentGain = 0;
+  int newGain = 8 * signalStrength - 200;
+  triggerUpdate++;
 
-  if (newRSSI > oldRSSI) {  // increase attenuation gradually until a balance is found
+  // newGain = constrain(newGain, 0, 255);
+
+
+  if (newGain > currentGain) {  // increase attenuation gradually until a balance is found
     SWAttn++;
-    oldRSSI++;
+    currentGain++;
   }
 
-  if (newRSSI < oldRSSI) {  // decrease attenuation gradually until a balance is found
+  if (newGain < currentGain) {  // decrease attenuation gradually until a balance is found
     SWAttn--;
-    oldRSSI--;
+    currentGain--;
   }
 
   if (SWAttn < SWMinAttn)
     SWAttn = SWMinAttn;
 
-  if (attnOFF)
-    SWAttn = 0;
+  //Serial.printf("ng %d  cg %d SWAttn %d\n", newGain, currentGain, SWAttn);
+  SWAttn = constrain(SWAttn, 1, 255);
+
+  //SWAttn = preferences.getUChar("swattn", 0);
 
 
-  tft.setTextColor(TFT_WHITE);
-  tft.setTextSize(1);
-  tft.fillRect(145, 140, 19, 9, TFT_BLACK);
-  tft.setCursor(145, 140);
-  tft.printf("%d", signalStrength);
-
-  tft.setTextColor(TFT_GREEN);
-  tft.setTextSize(1);
-  tft.fillRect(145, 157, 19, 9, TFT_BLACK);
-  tft.setCursor(145, 158);
-  tft.printf("%d", SWAttn);
-  tft.setTextSize(2);
-  tft.setTextColor(textColor);
+  if (!SWMinAttn)
+    SWAttn = 0;  // Attenuator and AGC off
 
 
-  if (oldRSSI != newRSSI)
+
+
+
+
+  if (displayDebugInfo && show && triggerUpdate % 20 == 0) {  // display update about every 200ms
+
+    triggerUpdate = 0;
+    etft.setTTFFont(Arial_14);
+    if (!SWAttn)
+      etft.setTextColor(TFT_RED);
+    else etft.setTextColor(TFT_GREEN);
+    etft.setCursor(100, 132);
+    etft.print(F("SW"));
+    etft.setCursor(100, 152);
+    etft.print(F("Attn."));
+    etft.setTextColor(textColor);
+
+
+    if (newGain > currentGain + 1 || newGain < currentGain - 1) {  // overwrite old and write new vale
+      tft.fillRect(140, 132, 25, 35, TFT_BLACK);
+      tft.setTextSize(1);
+      tft.setTextColor(TFT_WHITE);
+      tft.setCursor(145, 135);
+      tft.printf("%d", signalStrength);
+      tft.setCursor(145, 158);
+      tft.printf("%d", SWAttn);
+      tft.setTextSize(2);
+      tft.setTextColor(textColor);
+    }
+
+
     dac1.outputVoltage((uint8_t)SWAttn);  // set the dac
+  }
 }
 
 //##########################################################################################################################//
 
+/*
+uint16_t redToGreen(uint8_t val) {
+  uint8_t r, g, b = 0;
+
+  val = constrain(val, 30, 255);  // limit to orange
+
+  if (val <= 127) {
+    // Red to yellow: green incr.
+    r = 31;
+    g = (val * 63) / 127;
+  } else {
+    // Yellow to Green: red falls
+    r = ((255 - val) * 31) / 128;
+    g = 63;
+  }
+
+  return (r << 11) | (g << 5) | b;
+}
+
+*/
+//##########################################################################################################################//
 
 void setRFAttenuatorMinAttn() {  //Min. attenuation of the shortwave RF attenuator
 
@@ -1777,9 +1959,9 @@ void setRFAttenuatorMinAttn() {  //Min. attenuation of the shortwave RF attenuat
   tft.setTextColor(textColor);
   tft.fillRect(10, 60, 328, 64, TFT_BLACK);
   tft.setCursor(10, 63);
-  tft.print("Set minimum attenuation ");
+  tft.print(F("Set minimum attenuation "));
   tft.setCursor(10, 83);
-  tft.print("Press encoder to leave.");
+  tft.print(F("Press encoder to leave."));
   tft.setCursor(10, 104);
   tft.printf("Min Attenuator level:%d", SWMinAttn);
 
@@ -1792,21 +1974,24 @@ void setRFAttenuatorMinAttn() {  //Min. attenuation of the shortwave RF attenuat
     if (cclw)
       SWMinAttn -= 5;
 
-    if (SWMinAttn < 5) {
-      attnOFF = true;
-    } else {
-      attnOFF = false;
+    if (clw || cclw) {
+
+      SWMinAttn /= 5;
+      SWMinAttn *= 5;
     }
 
 
     if (oldSWMinAttn != SWMinAttn) {
       tft.fillRect(10, 104, 323, 20, TFT_BLACK);
       tft.setCursor(10, 104);
-
-      if (attnOFF)
-        tft.print("Attenuator OFF!           ");
-      else
+      if (SWMinAttn)
         tft.printf("Min Attenuator level:%d", SWMinAttn);
+      else {
+        tft.setTextColor(TFT_RED);
+        tft.print("AGC and Attnuator off");
+        tft.setTextColor(textColor);
+      }
+
       oldSWMinAttn = SWMinAttn;
     }
 
@@ -1816,9 +2001,228 @@ void setRFAttenuatorMinAttn() {  //Min. attenuation of the shortwave RF attenuat
     cclw = false;
   }
 
+  preferences.putUChar("swattn", SWMinAttn);
+
+
   while (digitalRead(ENCODER_BUTTON) == LOW)
     ;
 
   delay(200);
   encLockedtoSynth = true;
 }
+
+
+//##########################################################################################################################//
+
+
+void tapFreqDigit(void) {  // tap on a frequency digit to increase/decrease value
+#define SEPARATOR_Y 20     // vertical split btw increase and decrease digit
+
+
+  while (true) {
+    pressed = get_Touch();
+    if (!pressed) break;
+
+    // 1 Hz step
+    if (tx > 212 && tx < 230) {
+      hightLightDigit(212, 10, 15, 34);
+      FREQ += (ty <= SEPARATOR_Y) ? 1 : -1;
+    }
+
+    // 10 Hz step
+    else if (tx > 197 && tx < 215) {
+      hightLightDigit(197, 10, 15, 34);
+      FREQ += (ty <= SEPARATOR_Y) ? 10 : -10;
+    }
+
+    // 100 Hz step
+    else if (tx > 178 && tx < 195) {
+      hightLightDigit(178, 10, 15, 34);
+      FREQ += (ty <= SEPARATOR_Y) ? 100 : -100;
+    }
+
+    // 1 kHz step
+    else if (tx > 145 && tx < 165) {
+      hightLightDigit(145, 10, 20, 34);
+      FREQ += (ty <= SEPARATOR_Y) ? 1000 : -1000;
+    }
+
+    // 10 kHz step
+    else if (tx > 120 && tx < 140) {
+      hightLightDigit(120, 10, 20, 34);
+      FREQ += (ty <= SEPARATOR_Y) ? 10000 : -10000;
+    }
+
+    // 100 kHz step
+    else if (tx > 95 && tx < 120) {
+      hightLightDigit(95, 10, 25, 34);
+      FREQ += (ty <= SEPARATOR_Y) ? 100000 : -100000;
+    }
+
+    // MHz steps
+    if (FREQ < 10000000) {       // 10MHz
+      if (tx > 45 && tx < 80) {  // 1MHz digit
+        hightLightDigit(45, 10, 35, 34);
+        FREQ += (ty <= SEPARATOR_Y) ? 1000000 : -1000000;
+      }
+
+      if (tx > 25 && tx < 45) {  // "invisible 10HMz digit"
+        hightLightDigit(25, 10, 20, 34);
+        FREQ += (ty <= SEPARATOR_Y) ? 10000000 : -10000000;
+      }
+
+      if (tx < 20) {
+        hightLightDigit(4, 10, 16, 34);  //"invisible" 100MHz digit
+        FREQ += (ty <= SEPARATOR_Y) ? 100000000 : -100000000;
+      }
+    } else if (FREQ >= 10000000 && FREQ < 100000000) {  //10-100Mhz
+      if (tx > 45 && tx < 70) {
+        hightLightDigit(45, 10, 25, 34);
+        FREQ += (ty <= SEPARATOR_Y) ? 1000000 : -1000000;
+      }
+      if (tx > 20 && tx < 40) {
+        hightLightDigit(20, 10, 20, 34);
+        FREQ += (ty <= SEPARATOR_Y) ? 10000000 : -10000000;
+      }
+
+      if (tx < 20) {
+        hightLightDigit(4, 10, 16, 34);  //"invisible" 100MHz digit
+        FREQ += (ty <= SEPARATOR_Y) ? 100000000 : -100000000;
+      }
+    }
+
+    else if (FREQ >= 100000000) {
+      if (tx > 60 && tx < 80) {
+        hightLightDigit(60, 10, 15, 34);
+        FREQ += (ty <= SEPARATOR_Y) ? 1000000 : -1000000;
+      }
+      if (tx > 35 && tx < 55) {
+        hightLightDigit(35, 10, 20, 34);
+        FREQ += (ty <= SEPARATOR_Y) ? 10000000 : -10000000;
+      }
+      if (tx > 5 && tx < 30) {
+        hightLightDigit(5, 10, 25, 34);
+        FREQ += (ty <= SEPARATOR_Y) ? 100000000 : -100000000;
+      }
+    }
+
+    if (FREQ < MIN_FREQ) FREQ = MIN_FREQ;
+    if (FREQ > MAX_FREQ) FREQ = MAX_FREQ;
+
+    delay(150);
+    displayFREQ(FREQ);
+    checkRFModeChange();  // check whether switching SW to tuner or viceversa
+    tune();
+  }
+}
+
+
+//##########################################################################################################################//
+
+void hightLightDigit(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+  tft.drawRect(x, y, w, h, TFT_RED);
+}
+
+
+//##########################################################################################################################//
+
+void checkRFModeChange(void) {  // check whether FREQ has moved from SW to VHF/UHF or viceversa;
+
+
+  if ((FREQ <= SHORTWAVE_MODE_UPPER_LIMIT && FREQ_OLD >= SHORTWAVE_MODE_UPPER_LIMIT) || (FREQ >= SHORTWAVE_MODE_UPPER_LIMIT && FREQ_OLD <= SHORTWAVE_MODE_UPPER_LIMIT)) {
+
+    // a switchover has occured, this is needed to refresh the attenuator button label and agc values
+
+    dac1.outputVoltage((uint8_t)0);  // reset DAC
+    Serial.println("hardware switchover ");
+    etft.setTTFFont(Arial_14);
+    tft.fillRect(100, 132, 63, 37, TFT_BLACK);
+    etft.setCursor(100, 132);
+#ifdef TV_TUNER_PRESENT
+    if (FREQ > SHORTWAVE_MODE_UPPER_LIMIT) {
+      etft.setTextColor(TFT_SKYBLUE);
+      etft.print(F("Tun."));
+      etft.setCursor(100, 152);
+      etft.print(F("Attn."));
+    }
+#endif
+
+    if (FREQ <= SHORTWAVE_MODE_UPPER_LIMIT) {
+#ifdef SW_ATTENUATOR_PRESENT
+      etft.setTextColor(TFT_GREEN);
+      etft.print(F("SW"));
+      etft.setCursor(100, 152);
+      etft.print(F("Attn."));
+      etft.setTextColor(textColor);
+#endif
+    }
+  }
+}
+
+
+//##########################################################################################################################//
+
+void showTime() {
+
+  if (timeSet && !syncEnabled && !useNixieDial) {
+    getLocalTime(&timeinfo);
+    uint16_t tm = timeinfo.tm_hour * 100 + timeinfo.tm_min;
+    if (timeOld != tm) {
+      tft.fillRect(340, 6, 136, 16, TFT_BLACK);  // overwrite last time
+      tft.setCursor(340, 6);
+      tft.setTextColor(TFT_GREEN);
+      tft.print(&timeinfo, "%H:%M UTC");
+      tft.setTextColor(textColor);
+      timeOld = tm;
+    }
+  }
+}
+
+//##########################################################################################################################//
+
+void streamAudioLoop() {  //reduced loop that runs while streaming audio.
+
+  if (bufferFilled) {
+    bufferFilled = false;
+
+    if (streamAudio) {
+
+
+      if (audioBufSize < frSize) {  // freq or mode has changed
+        for (int i = 0; i < frSize; i++)
+          frame[i] = 0;                     //eliminate remains of last fuffer
+        ws.binaryAll(frame, audioBufSize);  // short silence
+        audioBufSize = frSize;
+      }
+
+      else
+        ws.binaryAll(frame, audioBufSize);  // push audio
+    }
+
+    getRSSIAndSNR();
+    calculateAndDisplaySignalStrength();
+    displaySmeterBar(4);
+
+#ifdef TV_TUNER_PRESENT
+    setTunerAGC(false);  // TV tuner AGC reduces tuner gain for better IP3, shows value in the Tuner Gain tile
+#endif
+
+#ifdef SW_ATTENUATOR_PRESENT
+    if (!TVTunerActive)
+      setShortwaveAGC(false);  // shortwave AGC
+#endif
+
+
+    checkTouchCoordinates();
+    mainScreen();  // build main window if needed
+
+
+    if (audioMuted) {  // web IF uses it's own squelch, so set receiver squelch to false
+      si4735.setAudioMute(false);
+      si4735.setHardwareAudioMute(false);
+      audioMuted = false;
+    }
+    notifyClients();  // send FREQ and S meter reading
+  }
+}
+//##########################################################################################################################//
