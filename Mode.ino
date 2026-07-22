@@ -97,16 +97,13 @@ void selectModulation() {
 
 
 
-#ifdef AUDIO_SQUAREWAVE_PRESENT
-  tft.setCursor(21, 132);
+  tft.setCursor(21, 142);
   tft.print(F("SSTV"));
-  tft.setCursor(21, 152);
-  tft.print(F("Sc/Ma"));
-  tft.setCursor(105, 132);
+  tft.setCursor(105, 142);
   tft.print(F("RTTY"));
-  tft.setCursor(105, 152);
-  tft.print(F("45.45"));
-#endif
+  tft.setCursor(188, 142);
+  tft.print(F("WEFAX"));
+
 
 
   tft.setCursor(21, 198);
@@ -151,17 +148,20 @@ void selectModulation() {
   switch (buttonID) {
 
     case 21:
-#ifdef AUDIO_SQUAREWAVE_PRESENT
       SSTVINIT();
       rebuildMainScreen(1);
-#endif
+
       break;
     case 22:
-#ifdef AUDIO_SQUAREWAVE_PRESENT
-      RTTYINIT();
+      RTTYMenu();
       rebuildMainScreen(1);
-#endif
       break;
+    
+      case 23:
+      wefaxInit();
+      rebuildMainScreen(1);
+      break;
+
     case 31:
       modType = AM;
       break;
@@ -399,6 +399,9 @@ void loadSSB() {
       tft.setTextColor(textColor);
     }
 
+  const uint16_t size_content = sizeof ssb_patch_content;  // See ssb_patch_content array below
+  const uint16_t cmd_0x15_size = sizeof cmd_0x15;          // Array of lines where the 0x15 command occurs in the patch content.
+
 
     Serial_println("Loading SSB patch");
     delay(25);
@@ -406,7 +409,7 @@ void loadSSB() {
     si4735.queryLibraryId();
     si4735.patchPowerUp();
     delay(50);
-    si4735.downloadPatch(ssb_patch_content, size_content);
+    si4735.downloadCompressedPatch(ssb_patch_content, size_content, cmd_0x15, cmd_0x15_size);
     si4735.setSSBConfig(bandWidth, 0, 0, 1, 0, 1);
     delay(25);
     si4735.setSSBAudioBandwidth(bandWidth);

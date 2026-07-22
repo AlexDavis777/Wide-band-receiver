@@ -125,7 +125,7 @@ bool readKeypadButtons(bool showInfo) {
       else
         FREQ = (long)(f * 1000);
 
-      if (FREQ > MAX_FREQ) {  // limit max input
+       if (FREQ < MIN_FREQ || FREQ > MAX_FREQ)  {  // limit max input
         FREQ = freqSave;
         keyPadErr();
       }
@@ -137,14 +137,14 @@ bool readKeypadButtons(bool showInfo) {
 
     if (row == 2 && column == 4) {  //enter Mhz
       tft.fillRect(10, 3, 325, 40, TFT_BLACK);
-      if (f > MAX_FREQ / 1000)
-        f /= 1000;  // Must be KHz by user error
       if (!decimalPoint)
         FREQ = (f * 100000);
       else
         FREQ = (f * 1000000);
 
-      if (FREQ < MIN_FREQ) {  // limit max input
+      roundFREQUpDown(1000); // eliminate the "999Hz" rounding error
+
+       if (FREQ < MIN_FREQ || FREQ > MAX_FREQ) {  // limit max input
         FREQ = freqSave;
         keyPadErr();
       }
@@ -578,14 +578,17 @@ String readKeyboard() {
       } else if (tx >= 100 && tx <= 200) {
         if (result.length() > 0)
           result.remove(result.length() - 1);  // Back
+          delay(200);
         if (result.length() == 0) {            // leave
           rebuildMainScreen(false);
+          
           return result;
         }
       }
 
       else if (tx >= 220 && tx <= 320) {
         result += " ";  // Space
+        delay(200);
       } else if (tx >= 340 && tx <= 440) {
         done = true;  // Enter
       }

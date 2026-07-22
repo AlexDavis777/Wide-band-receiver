@@ -45,8 +45,8 @@ void drawSDBtns() {
     { 183, 190, "Timer" },
     { 183, 210, "Record" },
 
-    { 260, 188, "" },
-    { 270, 210, "" },
+    { 265, 188, "SSTV" },
+    { 275, 210, "Files" },
 
     { 265, 245, "Play" },
     { 263, 268, "Audio" },
@@ -118,6 +118,8 @@ void readSDBtns() {
       rebuildMainScreen(1);
       break;
     case 34:
+     showSSTVFiles();
+     rebuildMainScreen(1);
       break;
     case 41:
       return;

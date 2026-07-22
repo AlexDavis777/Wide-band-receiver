@@ -513,6 +513,8 @@ void saveWifiCredentials() {
   tft.fillRect(0, 0, 480, 50, TFT_BLACK);
   tft.setCursor(0, 0);
   tft.printf("SSID: %s\nPassword: %s", ssid.c_str(), password.c_str());
+  displayText(0, 50, 0, 0, "Tap Enter to save, move encoder to skip.");
+  
   tRel();
 
   pressed = false;

@@ -40,10 +40,10 @@ void showMemo(bool isRead, bool usePageZero) {  // displays memo buttons
 
   showFreqHistory();
 
-  if (isRead)
+  if (isRead) {
     modType = 1;  // default to AM at startup
-
   loadSi4735parameters();
+  }
 
   if (usePageZero)  // when called from Mainscreen
     currentPage = 0;
@@ -86,9 +86,7 @@ void showMemo(bool isRead, bool usePageZero) {  // displays memo buttons
           etft.print(F("."));
           etft.setTextColor(TFT_YELLOW);
           etft.setTTFFont(Arial_9);
-          if (((FR % 1000000) / 1000) < 100)  // insert 0 if Freq < 100
-            etft.print(F("0"));
-          etft.printf("%ld", (FR % 1000000) / 1000);
+          etft.printf("%03ld", (FR % 1000000) / 1000);
           etft.setCursor(x_positions[j] + 40, y_positions[i] + 25);
           etft.setTTFFont(Arial_8);
           etft.setTextColor(TFT_SKYBLUE);
