@@ -29,6 +29,9 @@ halving current consumption and reduces regulator heat, making the device more p
     <img src="4.jpg" alt="Icon" />
 
 <p align="center">
+    <img src="1.png" alt="Icon" />
+
+<p align="center">
     <img src="1.jpg" alt="Icon" />
 
 <p align="center">
