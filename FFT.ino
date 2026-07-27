@@ -323,10 +323,10 @@ float Q1 = 0;
 float Q2 = 0;
 float sine;
 float cosine;
-float sampling_freq = 25000;  // adjusted from 45000 to 25000
+float sampling_freq = 8000;  // ISR sampling rate
 float target_freq = 558.0;    // adjust for your needs see above
-int n = 64;                   // if you change here please change next line also
-int testData[64];             // adjusted from 128  to 64
+int n = 128;                   // if you change here please change next line also
+
 float bw;
 
 // Noise Blanker time which shall be computed so this is initial
@@ -389,16 +389,27 @@ void CWDecoder() {
 
     //////////////////////////////////// The basic goertzel calculation //////////////////////////////////////
 
+Q1 = 0;
+Q2 = 0;
 
-    // Read analog input and do the Goertzel
-    for (byte index = 0; index < n; index++) {
-      adc_oneshot_read(adc1_handle, ADC_CHANNEL_0, &raw36);
-      testData[index] = raw36;
-      float Q0;
-      Q0 = coeff * Q1 - Q2 + (float)testData[index];
-      Q2 = Q1;
-      Q1 = Q0;
+
+for (byte index = 0; index < n; index++) {
+    // (every 125 µs)
+    unsigned long currentTick = audioTicks;
+    while (audioTicks == currentTick) {
+      
+    delayMicroseconds(1);
     }
+
+
+  float sample = (float)raw36;
+
+    // Goertzel recurrence
+   float Q0 = coeff * Q1 - Q2 + sample;
+    Q2 = Q1;
+    Q1 = Q0;
+}
+
 
     float magnitudeSquared = (Q1 * Q1) + (Q2 * Q2) - Q1 * Q2 * coeff;  // we do only need the real part //
     magnitude = sqrt(magnitudeSquared);

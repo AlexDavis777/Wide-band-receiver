@@ -71,9 +71,12 @@ void setBand(bool isWaterfall) {  // Use Select Band button to set start freq to
       return;
     }
 
-    if (strcmp(sel.bandName, "NEXT") == 0)
+    if (strcmp(sel.bandName, "NEXT") == 0) {
       page = (page + 1);  // load pages
+      tRel();
+    }
 
+    
     else {  // select modType depending on Band
       if (!isWaterfall) {
 

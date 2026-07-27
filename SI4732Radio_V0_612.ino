@@ -9,8 +9,6 @@
 
 #define TV_TUNER_PRESENT  // If this option is commented out, a shortwave receiver version will compile. In this case max. FREQ = 50MHz.
 
-//#define AUDIO_SQUAREWAVE_PRESENT  // Audio squarewave present on GPIO39 for SSTV and RTTY decoding. Experimental.
-
 #define FAST_TOUCH_HANDLER  // Invokes a faster touch handler with reduced sampling. Could cause spurious errors if the touchscreen is worn out, but increases speed significantly. No problems so far.
 
 #define SHOW_DEBUG_UTILITIES  // Will show Debug utilities panel. Contains helper functions and status messages.
@@ -19,11 +17,11 @@
 
 //#define CRYSTAL_FREQ_BELOW_IF  // Activate only if using an NBFM demdulator with a crystal frequency below 21.4MHz. Activating will reverse afc and tuning meter direction.
 
-#define SI5351_GENERATES_CLOCKS  //If active, the SI5351 will generate the LO frequency plus 2 clocks, 4MHz for the tuner and 32768Hz for the SI4732.
+//#define SI5351_GENERATES_CLOCKS  //If active, the SI5351 will generate the LO frequency plus 2 clocks, 4MHz for the tuner and 32768Hz for the SI4732.
 
 //#define TINYSA_PRESENT  // Syncs and controls a tinySA with receiving frequency, if connected via serial to the ESP32.
 
-//#define SW_ATTENUATOR_PRESENT  // Activate only if a voltage controlled attenuator is present in the shortwave RF path. Generates gain control voltage on dac1(GPIO_NUM_25). 0V = max. gain, 3.3V = min gain.
+#define SW_ATTENUATOR_PRESENT  // Activate only if a voltage controlled attenuator is present in the shortwave RF path. Generates gain control voltage on dac1(GPIO_NUM_25). 0V = max. gain, 3.3V = min gain.
 
 #define HTTTP_PORT 80  // Port for remote interface. Change if you connect from outside your local WiFi.
 
@@ -136,8 +134,7 @@ This code will only work with ILI9488 480*320 pixel displays and is NOT adaptabl
 9. For the FFT analysis and the morse decoder, audio output pin 16 goes via 4.7K and 1 microfarad to the base of a npn transistor amplifier. 
    Gain should be about 20 dB and 0.5 - 1V pp audio at the output works fine.
 
-10. An additional audio amplifier with a square wave forming circuit consisting of a two transistor amplifier (and optionally a NE555) can be connected to GPIO39.
-This allows the experimental SSTV and RTTY decoders to work.
+10. Experimental SSTV, RTTY and WEFAX decoders have been added.
 
 11. If you use a tinySA, connect GPIO 1 of the ESP32 with the RX pin of the tinySA and GPIO 3 with the TX pin (close to the battery connector).
 This will allow control of tinySA parameters from the receiver menu.
@@ -411,7 +408,6 @@ Signal strength history (bottom right). Tap to hide/unhide.
 // Needs to be installed separately (via Arduino Library Manager or GitHub)
 #include <TFT_eSPI.h>         // Library Manager: "TFT_eSPI" by Bodmer
 #include <JPEGDecoder.h>      // Library Manager: "JPEGDecoder" by Bodmer
-#include <PNGdec.h>           // Library Manager: "PNGdec" by Larry Bank
 #include <si5351.h>           // Library Manager: "Si5351Arduino" by Jason Milldrum
 #include "arduinoFFT.h"       // Library Manager: "arduinoFFT" by kosme
 #include "DacESP32.h"         // Library Manager: "DacESP32" (ESP32 DAC library)
@@ -427,7 +423,7 @@ Signal strength history (bottom right). Tap to hide/unhide.
 
 
 // Project-specific (local headers included with project)
-#include "patch_full.h"  // Project-specific SSB patch
+#include <patch_ssb_compressed.h> // SSB patch for whole SSBRX initialization string // Project-specific SSB patch
 #include "Sprites.h"     // Project-specific bitmaps and sprites
 #include "nxfont24.h"    // Project-specific nixie font
 #include "logSerial.h"   // Project-specific logging
@@ -452,10 +448,13 @@ void IRAM_ATTR processAudio() {  //audio sampler and player, samples 8bit unsign
     }
   }
 
-  if (bufferFilled)  //frame[] full
-    return;
+
 
   adc_oneshot_read(adc1_handle, ADC_CHANNEL_0, &raw36);  //read GPIO36
+
+
+    if (bufferFilled)  //frame[] full
+    return;
 
   int32_t s = (int32_t)(raw36 - gpio36_Offset);
 
@@ -487,17 +486,6 @@ void IRAM_ATTR RotaryEncFreq() {  // rotary encoder interrupt handler
 }
 
 //##########################################################################################################################//
-
-#ifdef AUDIO_SQUAREWAVE_PRESENT
-
-void IRAM_ATTR handlePulse() {
-  newPulse = true;  // Pulse handler for SSTV / RTTY freq counter
-}
-
-#endif
-
-//##########################################################################################################################//
-
 
 
 void setup() {
@@ -970,15 +958,14 @@ void roundFreqToSTEP() {  // round  FREQ up or down to the next STEP when STEP o
   if (roundToStep == false)
     return;
 
-
   if (modType == AM) {             // Not SSB orNBFM
-    if ((FREQ_TO_KHZ) % 10 > 5) {  // round 6 - 9 up
+    if (((FREQ_TO_KHZ) % 10 > 5) ||  (FREQ % 10 > 5))   {  // round 6 - 9 up
       FREQ /= STEP;
       FREQ *= STEP;
       FREQ += STEP;
     }
 
-    if ((FREQ_TO_KHZ) % 10 < 5)  // round 1 - 4 down
+    if (((FREQ_TO_KHZ) % 10 < 5) || (FREQ % 10 < 5))  // round 1 - 4 down
     {
       FREQ /= STEP;
       FREQ *= STEP;
@@ -1027,6 +1014,50 @@ void drawButton(int16_t x, int16_t y, int16_t w, int16_t h, uint32_t color1, uin
       tft.pushImage(x, y, 130, 80, (uint16_t*)Bigbutton);  // draw big green neon sprite for big buttons
   }
 }
+
+//##########################################################################################################################//
+
+void draw4Buttons() {  // draws 3 rows with 4 buttons each
+
+
+  /*
+Button positions:
+1	8	121
+2	91	121
+3	174	121
+4	257	121
+5	8	178
+6	91	178
+7	174	178
+8	257	178
+9	8	235
+10	91	235
+11	174	235
+12	257	235
+
+*/
+
+
+  const int hStart = 8;
+  const int ySpace = 57;   //57
+  const int yStart = 121;  //121
+  tft.fillRect(2, 48, 337, 8, TFT_BLACK);
+  tft.fillRect(2, 288, 337, 4, TFT_BLACK);  // overwrite remains of previous sprites
+  for (int j = 0; j < 4; j++) {
+    drawButton(hStart + j * 83, yStart + 2 * ySpace, TILE_WIDTH, TILE_HEIGHT, TFT_BTNCTR, TFT_BTNBDR);
+  }
+}
+//##########################################################################################################################//
+
+
+
+
+
+
+
+
+
+
 //##########################################################################################################################//
 
 void draw12Buttons(uint16_t color1, uint16_t color2) {  // draws 3 rows with 4 buttons each
@@ -1291,9 +1322,9 @@ void slowTaskHandler() {  // handles tasks with a long period. not precise.
   static bool done = false;
   static bool wFinished = false;
   static bool timeInit = false;
-  static uint8_t reconnects = 5;
+  static uint8_t reconnects = 0;
 
-  if (displayDebugInfo)
+ 
     loopTimer();
 
 
@@ -1320,6 +1351,7 @@ void slowTaskHandler() {  // handles tasks with a long period. not precise.
           }
         }
         reconnects++;
+        sTmr = 0;
         return;
 
       } else {
@@ -1428,16 +1460,19 @@ void loopTimer() {  // displays loop time and stops if from falling below 10ms
     return;
   else
     oldCycleTime = cycleTime;
+
+   if (displayDebugInfo) {
   tft.setTextSize(1);
   tft.fillRect(0, 308, 135, 12, TFT_BLACK);
   tft.setCursor(0, 311);
   tft.setTextColor(TFT_WHITE);
   tft.printf("LOOP:%ldms HEAP:%ldK", cycleTime, ESP.getFreeHeap() / 1024);
-
-
-
   tft.setTextColor(textColor);
   tft.setTextSize(2);
+   }
+
+
+
 
   if (cycleTime < 10)  // stabilize the loop at minimum 10ms , otherwise functions that depend on the loop time may run too fast
     loopDelay++;
@@ -2224,5 +2259,20 @@ void streamAudioLoop() {  //reduced loop that runs while streaming audio.
     }
     notifyClients();  // send FREQ and S meter reading
   }
+}
+//##########################################################################################################################//
+
+void setFreeFont() {
+
+tft.setTextSize(1);
+tft.setFreeFont(&FreeSans9pt7b);
+}
+
+//##########################################################################################################################//
+void  setTextFont() {
+
+tft.setFreeFont(NULL);
+tft.setTextFont(1);
+tft.setTextSize(2);
 }
 //##########################################################################################################################//

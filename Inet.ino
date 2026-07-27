@@ -125,55 +125,7 @@ void downloadFile(bool fill) {  // downloads a jpg or png file
 
 //##########################################################################################################################//
 
-void displayPNG() {
 
-  int rc = png.open("/image.img", myOpen, myClose, myRead, mySeek, PNGDraw);
-  if (rc == PNG_SUCCESS) {
-    rc = png.decode(NULL, 0);
-    png.close();
-  } else {
-    tft.printf("Error opening PNG file");
-  }
-}
-
-
-//##########################################################################################################################//
-
-void *myOpen(const char *filename, int32_t *size) {
-  myfile = LittleFS.open(filename);
-  if (!myfile) return NULL;
-  *size = myfile.size();
-  return &myfile;
-}
-
-//##########################################################################################################################//
-void myClose(void *handle) {
-  if (myfile) myfile.close();
-}
-
-//##########################################################################################################################//
-int32_t myRead(PNGFILE *handle, uint8_t *buffer, int32_t length) {
-  if (!myfile) return 0;
-  return myfile.read(buffer, length);
-}
-
-//##########################################################################################################################//
-int32_t mySeek(PNGFILE *handle, int32_t position) {
-  if (!myfile) return 0;
-  return myfile.seek(position);
-}
-
-//##########################################################################################################################//
-int PNGDraw(PNGDRAW *pDraw) {
-  uint16_t usPixels[2500];
-  //const uint32_t hShift = -110, vShift = 70;
-  const uint32_t hShift =  20, vShift = -70;
-  png.getLineAsRGB565(pDraw, usPixels, PNG_RGB565_BIG_ENDIAN, 0xffffffff);
-  //tft.pushRect(leftShift + xShift, pDraw->y - downShift + yShift, pDraw->iWidth, 1, usPixels);
-  tft.pushRect(hShift + xShift, pDraw->y - vShift + yShift, pDraw->iWidth, 1, usPixels);
-  
-  return 1;
-}
 
 //##########################################################################################################################//
 
@@ -203,8 +155,8 @@ void drawIBtns() {
     { 265, 248, "NOAA" },
     { 273, 200, "Sun" },
     { 270, 268, "Alerts" },
-    { 190, 248, "SW" },
-    { 190, 268, "Cond." },
+    { 190, 248, " " },
+    { 190, 268, "" },
     { 100, 248, "Sat" },
     { 100, 268, "Image" },
     { 20, 248, "Fore" },
@@ -289,10 +241,6 @@ void readIBtns() {
       JPEGWrapper(15);
       break;
     case 43:
-      downloadSelector = 5;  // condition map
-      xShift = 0;
-      yShift = -15;
-      PNGWrapper(30);
       break;
     case 44:  // NOAA spaceweathr alerts
       reportSelector = 1;
@@ -360,24 +308,6 @@ void JPEGWrapper(int cycle) {  // JPG wrapper, cycle = reload time in minutes
     downloadFile(false);
     WiFi.disconnect();
     displayJpeg();
-    for (long i = 0; i < cycle * 600; i++) {
-      get_Touch();
-      if (pressed)
-        ESP.restart();
-      delay(100);
-    }
-  }
-}
-//##########################################################################################################################//
-
-void PNGWrapper(int cycle) {
-
-  while (true) {
-    connectWIFI();
-    downloadFile(false);
-    WiFi.disconnect();
-    tft.fillScreen(TFT_BLACK);
-    displayPNG();
     for (long i = 0; i < cycle * 600; i++) {
       get_Touch();
       if (pressed)

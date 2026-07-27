@@ -110,8 +110,8 @@
 #define RELAY_SWITCH_OUTPUT 14     // activates IF  and LNA relays. Low = tvTuner connected to LNA and AD831
 #define ENCODER_PIN_B 16           // Encoder left and right pins
 #define ENCODER_PIN_A 17           // Encoder left and right pins
-#define ESP32__SDA 21           //  bus
-#define ESP32__SCL 22           //  bus
+#define ESP32_I2C_SDA 21           // I2C bus
+#define ESP32_I2C_SCL 22           // I2C bus
 #define TUNER_AGC_PIN 25           // tuner AGC pin
 
 
@@ -209,10 +209,10 @@ TFT_eSprite spr2 = TFT_eSprite(&tft);  // rolling RSSI indicator
 TFT_eSprite spr3 = TFT_eSprite(&tft);  // audio waterfall after user inactivity
 
 
-Si5351 si5351(0x60);  //Si5351  Address 0x60
+Si5351 si5351(0x60);  //Si5351 I2C Address 0x60
 SI4735 si4735;
 Preferences preferences;  // Flash save data
-PNG png;
+
 File myfile;
 SdFat sd;  // SdFat library
 FsFile f;
@@ -242,7 +242,7 @@ volatile bool cclw = false;                              // counter clockwise
 
 const char ver[] = "V.611";  // version
 
-long I2C_BUSSPEED = 500000;  // Adjust as needed. 
+long I2C_BUSSPEED = 500000;  // Adjust as needed.
 long STEP;                    //STEP size
 long OLDSTEP;
 const long MIN_FREQ = 100000;          // lowest frequency
@@ -430,14 +430,6 @@ uint32_t audioTicks = 0;
 
 
 
-#ifdef AUDIO_SQUAREWAVE_PRESENT
-// Pulse counter
-volatile uint16_t frq = 0;                 // audiofrequency pulse counter
-volatile unsigned long lastPulseTime = 0;  // Timestamp of the last rising edge
-volatile unsigned long pulseInterval = 0;  // Time between rising edges
-volatile bool newPulse = false;
-#endif
-
 // Buttons
 extern const uint16_t But1[], But2[], But3[], But4[], But5[], But6[], But7[], But8[];  // bitmap buttons in sprite.h
 const uint16_t* buttonImages[] = { But1, But2, But3, But4, But5, But6, But7, But8 };
@@ -466,6 +458,21 @@ uint16_t audioBufSize = frSize;
 volatile bool bufferFilled = false;
 
 
+//SSTV and measure  audio freq
+volatile uint16_t frq = 0;                 // global audio frequec
+volatile uint32_t lastCrossUs = 0;
+volatile uint32_t prevHalfUs  = 0;
+uint32_t lastFreq = 1900;
+bool rawMode = true; // Will save SSTV files in raw mode when on. Around 76KB per file. When off, will save as .bmp. Around 250KB
+uint8_t *fBuf; // SSTV ram buffer
+uint16_t lineBuffer[DISP_WIDTH] = { 0 };     
+uint8_t helper1[320] = {0}; // noise reduction temp buffers
+uint8_t helper2[320] = {0};
+uint8_t helper3[320] = {0};
+uint8_t helper4[320] = {0};
+
+
+
 
 uint8_t downloadSelector = 0;
 bool swappedJPEG = false;
@@ -476,16 +483,14 @@ int reportSelector = 0;
 struct tm timeinfo;
 bool timeSet = false;
 uint16_t timeOld = 0;
-char urlbuffer[100]; // temporary URL's 
+char urlbuffer[80]; // temporary URL's 
 
 
-// URL's for png and jpeg images. Change as you like. Resolution is limited to 480 * 320 pixels
+// URL's for jpeg images. Change as you like. Resolution is limited to 480 * 320 pixels
 const char* host1 = "https://www.sws.bom.gov.au/Images/HF%20Systems/Global%20HF/Fadeout%20Charts/rtalf.jpeg";
 const char* host2 = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/FD/GEOCOLOR/339x339.jpg";
-//const char* host3 = "https://www.sws.bom.gov.au/Images/SOLROT/noscript/SOL_IMG_2.jpg";
 const char* host3 = "https://www.sws.bom.gov.au/Images/SOLROT/noscript/SOL_IMG_9.jpg";
 const char* host4 = "https://cdn.star.nesdis.noaa.gov/GOES19/ABI/SECTOR/CAM/GEOCOLOR/1000x1000.jpg";
-//const char* host5 = "https://services.swpc.noaa.gov/images/animations/d-rap/global/latest.png";
 const char* host5 =  "https://rigreference.com/solar/img/wide";
 const char* al = "https://services.swpc.noaa.gov/products/alerts.json";     // Spaceweather alerts from NOAA
 const char* fr = "https://services.swpc.noaa.gov/text/3-day-forecast.txt";  // Forecast from NOAA
@@ -729,9 +734,9 @@ std::vector<BandInfo> originalBandList = {  // Any entry here will be carried ov
   { "17M", 18068, 18168, true, 20 },     // Amateur radio band,
   { "16M", 17550, 17900, false, 21 },    // Broadcast SW band,
   { "15M", 21000, 21450, true, 22 },     // Amateur radio band,
-  { "13M", 21450, 21850, false, 22 },    // Broadcast SW band,
+  { "13M", 21450, 21850, false, 23 },    // Broadcast SW band,
   { "12M", 24890, 24990, true, 24 },     // Amateur radio band,
-  { "11M", 25670, 26100, false, 24 },    // Broadcast SW band,
+  { "11M", 25670, 26100, false, 25 },    // Broadcast SW band,
   { "10M", 28000, 29700, true, 26 },     // Amateur radio band,
   { "CB", 26965, 27600, false, 27 },     // CB band,
   { "4M", 50000, 54000, true, 28 },      // Amateur radio band,
