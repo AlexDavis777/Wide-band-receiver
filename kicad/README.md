@@ -23,7 +23,10 @@ halving current consumption and reduces regulator heat, making the device more p
     <img src="radio1.png" alt="Icon" />
 
 <p align="center">
-    <img src="radio2.png" alt="Icon" />
+    <img src="radio2.png" alt="Icon" 
+
+<p align="center">
+    <img src="4.jpg" alt="Icon" />
 
 <p align="center">
     <img src="1.jpg" alt="Icon" />
@@ -34,6 +37,4 @@ halving current consumption and reduces regulator heat, making the device more p
 <p align="center">
     <img src="3.jpg" alt="Icon" />
 
-<p align="center">
-    <img src="4.jpg" alt="Icon" />
 
