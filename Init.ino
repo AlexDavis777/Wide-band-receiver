@@ -4,11 +4,18 @@ void bootScreen() {
   int16_t si4735Addr = 0;
   tft.init();
 
-#ifdef FLIP_IMAGE
-  tft.setRotation(3);
-#else
-  tft.setRotation(1);
-#endif
+  flipImage = preferences.getBool("flip", 0);
+  invertColors = preferences.getBool("invC", 0);
+
+  if (flipImage)
+    tft.setRotation(3);
+  else
+    tft.setRotation(1);
+
+  if (invertColors)
+    tft.invertDisplay(true);
+
+
   tft.setTextColor(TFT_FOREGROUND);
   tft.fillScreen(TFT_BLACK);
   tft.setTextSize(2);
@@ -74,7 +81,7 @@ void bootScreen() {
 
     tft.setTextColor(TFT_YELLOW);
     tft.setCursor(0, 260);
-    tft.print(F("Touch screen to see settings,\nor to calibrate touchscreen"));
+    tft.print(F("Touch screen to calibrate touchscreen"));
     tft.setTextColor(textColor);
     tft.setCursor(0, 200);
     tft.print(ver);
@@ -373,8 +380,6 @@ void drawBigBtns() {
 void loadLastSettings() {
 
 
-  pinMode(ENCODER_BUTTON, INPUT_PULLUP);  // needed during while (true)
-
   FREQ = preferences.getLong("lastFreq", 0);          // load last Freq
   bandWidth = preferences.getInt("lastBw", 0);        // last bandwidth
   modType = preferences.getChar("lastMod", 1);        //last modulation type
@@ -410,6 +415,7 @@ void loadLastSettings() {
   wideIFFilter = preferences.getBool("bwf", 0);
   enableRigCtl = preferences.getBool("cat", 0);
   SWMinAttn = preferences.getUChar("swattn", 0);
+  dacDelay = preferences.getChar("kiwi", 70);            // KiwiSDR microseconds for each sample
 
   Serial.println("Settings loaded:");
   Serial.printf("Frequency: %ld kHz\n", FREQ);
@@ -452,12 +458,12 @@ void loadLastSettings() {
   tRel();
 
   if (!fastBoot) {  // provide option to calibrate touchscreen
+uint32_t now = millis();
 
-    for (int i = 0; i < 2000; i++) {
-      delay(1);
+   while (millis() < now + 2000) {
+      pressed = false;
       get_Touch();
-
-      if (pressed) {
+      if (pressed) { 
         tft.setTextSize(1);
         tft.fillScreen(TFT_BLACK);
         tft.setCursor(0, 0);
@@ -481,23 +487,24 @@ void loadLastSettings() {
         tft.printf("Show panorama when squelch closed %s\n", showPanorama ? "Yes" : "No");
         tft.printf("%-35s %s\n", "Retro dial:", useNixieDial ? "Yes" : "No");
         tft.printf("%-35s %d\n", "Tuner AGC start value", gainLimit);
+        
+        
         tft.setTextSize(2);
         tft.setTextColor(TFT_RED);
-        tft.print(F("\nPress encoder for touch calibration,\nor touch the screen to continue."));
+        tft.print(F("\nPress encoder for screen calibration,\nor touch the screen to continue."));
         tft.setTextColor(textColor);
-
+          
         tRel();
-
+        pressed = false;
         while (true) {
+         delay(10); 
+         if (tft.getTouchRawZ() > 300)  
+            return; 
           if (digitalRead(ENCODER_BUTTON) == LOW) {
-            touchCal();
+            firstRun();
             return;
           }
-
-          else if (get_Touch()) {
-            pressed = false;
-            return;
-          }
+         
         }
       }
     }
@@ -530,3 +537,62 @@ void init_ADC_Oneshot() {
   // GPIO35 (ADC1_CHANNEL_7) Squelch
   adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_7, &config);
 }
+
+
+//##########################################################################################################################//
+
+void firstRun() {
+  tft.setRotation(1);
+  tft.setTextSize(2);
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(100, 0);
+  tft.println("---Firstrun---");
+  tft.setCursor(0, 90);
+  tft.println("Is the image upside down?\nIf not, move encoder counter clockwise.\nIf yes, move encoder clockwise.");
+  while (clw == false && cclw == false)
+    ;
+
+  if (clw) {
+    tft.setRotation(3);
+    preferences.putBool("flip", true);
+  } else
+    preferences.putBool("flip", false);
+
+
+  clw = false;
+  cclw = false;
+
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0, 90);
+  tft.println("Are colors inverted (white background)?\nIf not, move encoder counter clockwise.\nIf yes, move encoder clockwise");
+  while (clw == false && cclw == false)
+    ;
+
+  if (clw) {
+    tft.invertDisplay(true);
+    preferences.putBool("invC", true);
+  } else
+    preferences.putBool("invC", false);
+
+  clw = false;
+  cclw = false;
+
+
+  tft.fillScreen(TFT_BLACK);
+  tft.println("Next, calibrate the touch screen.\nTouch to continue.");
+
+  tPress();
+
+  touchCal();
+
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0, 0);
+  tft.println("Finished.\nTouch to restart.");
+
+  tPress();
+  ESP.restart();
+}
+
+
+
+//##########################################################################################################################//

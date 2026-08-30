@@ -1,5 +1,7 @@
 
 
+// EXPERIMENTAL SSTV decoder expects a square wave of the audio signal on PULSE_PIN
+// Only Scottie and Martin modes implemented
 
 #define LINE_WIDTH 320  // Width of the image
 #define FREQ_MIN 1500   // Minimum frequency for pixel decoding
@@ -33,7 +35,7 @@ uint32_t getAnalogFrequency()
     adc_oneshot_read(adc1_handle, ADC_CHANNEL_0, &raw36);
 
     // Hysteresis
-    const int HYST = 3; // need chack what's best
+    const int HYST = 3;
 
     bool newAbove = above;
 
@@ -191,7 +193,7 @@ int checkLittleFSSpaceAndCleanup(bool rawmode) {
         break;
       }
     } else {
-      Serial.println("Notn to delete");
+      Serial.println("No matching file found to delete");
       break;
     }
 
@@ -201,7 +203,7 @@ int checkLittleFSSpaceAndCleanup(bool rawmode) {
                   (unsigned)usedBytes, (unsigned)freeBytes);
   }
 
-  Serial.printf("Ready,deleted %d files\n", deletedCount);
+  Serial.printf("Cleanup finished, deleted %d files\n", deletedCount);
   return deletedCount;
 }
 
@@ -1874,7 +1876,7 @@ bool decodewefaxLine(int line) {  // Scan line frequency: 2 lines per second (12
       storePixel((pos * 320) / 480, line / 5, lineBuffer[pos]);
     }
 
-     if(blackCounts > 2) { // do not write empty lines, 2 is a good treshold
+     if(blackCounts > 2) { // do not write empty lines
    
   
 

@@ -32,10 +32,10 @@ void drawCf3Btns() {
     { 185, 151, "Fun" },
     { 265, 132, "CAT" },
     { 265, 151, "Cntl." },
-    { 20, 188, "" },
-    { 20, 210, "" },
-    { 100, 188, "" },
-    { 100, 210, "" },
+    { 20, 188, "Kiwi" },
+    { 20, 210, "Waterf." },
+    { 100, 188, "Lat. /" },
+    { 100, 210, "Lon." },
     { 185, 190, "" },
     { 188, 210, "" },
     { 262, 190, "" },
@@ -117,8 +117,10 @@ void readCf3Btns() {
     }
       break;
     case 31:
+      showKiwiWF = true;
       break;
     case 32:
+      saveLatLon();
       break;
     case 33:
       break;
@@ -382,3 +384,77 @@ tPress();
 rebuildMainScreen(false);
 
  }
+
+
+
+//##########################################################################################################################//
+
+void saveLatLon() { // save latitude + longitude
+
+  String lat, lon;
+
+  tRel();
+
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_WHITE);
+
+
+  displayText(0, 12, 0, 0, "Set Latitude (e.g.34.05)");
+
+
+  lat = readKeyboard();
+
+  if (lat.length() == 0) {
+    rebuildMainScreen(false);
+    return;
+  }
+
+  tRel();
+
+  tft.fillRect(0, 0, 320, 55, TFT_BLACK);
+
+   displayText(0, 12, 0, 0, "Set Longitude (e.g.-118.24)");
+  lon = readKeyboard();
+
+  if (lon.length() == 0) {
+    rebuildMainScreen(false);
+    return;
+  }
+
+
+  tft.fillRect(0, 0, 480, 260, TFT_BLACK);
+  tft.setCursor(0, 0);
+  tft.printf("Lat: %s\nLon: %s", lat.c_str(), lon.c_str());
+  displayText(0, 62, 0, 0, "Tap Enter to save, move encoder to skip.");
+
+  tRel();
+
+  pressed = false;
+
+  while (true) {
+    pressed = get_Touch();
+
+
+     if (pressed && (ty >= 270 && ty <= 304) && (tx >= 340 && tx <= 440)) {  // Enter
+     
+    
+float latitude = lat.toFloat();
+float longitude = lon.toFloat();
+     
+     
+      preferences.putFloat("lat", latitude);
+      preferences.putFloat("lon", longitude);
+      preferences.putBool("fB", true);
+      displayText(0, 100, 100, 0, "Coordinates saved.");
+      delay(1000);
+      ESP.restart();
+    }
+
+    else if (clw + cclw) {
+      clw = false;
+      cclw = false;
+      setTextFont();
+      return;
+    }
+  }
+}
