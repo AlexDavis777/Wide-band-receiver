@@ -1,0 +1,5 @@
+121900,118600,120500,119600,121300,127675,126800,118300,124100,000000,
+
+Frequencies are in KHz. Enter 10 csv values for the wide band receiver. Enter only 5 values for the SI4732 receiver.
+The first 5 frequencies correspond to buttons: Ground, Tower, Approach, Control, Clearance.
+The second 5 frequencies are unlabeled buttons.
