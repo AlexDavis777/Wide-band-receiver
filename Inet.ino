@@ -1244,8 +1244,11 @@ bool radarUIParser(int centerX, int centerY, uint32_t *lastUpdate, float *displa
   get_Touch();
 
 
-  if (ty > 165 && ty < 205 && tx > 270)  // return
+  if (ty > 165 && ty < 205 && tx > 270) { // return
+    WiFi.disconnect();
+    WiFi.mode(WIFI_OFF);
     return false;
+  }
 
   else if (ty > 165 && ty < 205 && tx < 50) {  // clear trails
     tft.fillCircle(centerX, centerY, 118, TFT_BLACK);
