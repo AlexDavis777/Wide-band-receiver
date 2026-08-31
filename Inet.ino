@@ -1391,7 +1391,8 @@ bool loadATCFreqs() {
     char key[12];
     snprintf(key, sizeof(key), "atcfreq%d", i + 1);
 
-    preferences.putLong(key, (long)freq);
+    if ((preferences.getLong(key, 0) != freq) || (!preferences.isKey(key)))  
+      preferences.putLong(key, (long)freq);
 
     start = comma + 1;
   }
