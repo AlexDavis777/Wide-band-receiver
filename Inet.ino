@@ -46,6 +46,8 @@ const char *makeEibiFilename(struct tm *timeinfo) {  //changes every 6 months
   return urlbuffer;
 }
 
+
+
 //##########################################################################################################################//
 
 
@@ -142,8 +144,8 @@ void drawIBtns() {
 
     { 20, 133, "Get" },
     { 20, 153, "UTC" },
-    { 100, 133, "" },
-    { 100, 153, "" },
+    { 100, 133, "Kiwi" },
+    { 100, 153, "SDR" },
     { 188, 133, "WiFi" },
     { 188, 153, "Interf." },
     { 270, 133, "Flight" },
@@ -198,7 +200,15 @@ void readIBtns() {
       getTime();
       break;
     case 22:
+      if (!setupKiwi())
+        return;
+      timerEnd(timer);  // free resources
+      loopKiwi();
+      startAudioSampler();
+      WiFi.disconnect();
+      WiFi.mode(WIFI_OFF);
       break;
+
     case 23:
       webIF();
       break;
@@ -628,16 +638,20 @@ void webIF() {  // webIF needs >95K free heap
   aserver.begin();
 }
 
-
-
 //##########################################################################################################################//
 // Flight radar
 //##########################################################################################################################//
 
-const uint16_t centerX = 160;
-const uint16_t centerY = 110;
+
+
+const uint16_t centerX = 208;
+const uint16_t centerY = 150;
+const uint16_t diam = 150;
+float displayRad = 25;  // km
 String trackedICAO = "";
 bool trackingAircraft = false;
+bool drawMaps = false;
+bool scanATC = false;
 flight_info trackedFlight;
 
 
@@ -706,8 +720,8 @@ bool get_flights(float latitude, float longitude,
   for (auto kvp : flight_data_root) {
     if (!kvp.value().is<JsonArray>()) continue;
     auto items = kvp.value().as<JsonArray>();
-  if(displayDebugInfo)  
-    log_i("KVP=%s", kvp.key().c_str());
+    if (displayDebugInfo)
+      log_i("KVP=%s", kvp.key().c_str());
 
 
 
@@ -745,9 +759,9 @@ void showFlights() {
 
   float lat = preferences.getFloat("lat", 0);
   float lon = preferences.getFloat("lon", 0);
-  float displayRad = 25;         // km
   uint32_t refreshRate = 15000;  // ms
   static bool blink = false;
+
   connectWIFI();
 
   tft.fillScreen(TFT_BLACK);
@@ -760,11 +774,23 @@ void showFlights() {
 
   loadATCFreqs();  // load frequencies from CSV
   tft.setTextSize(1);
-  tft.setCursor(0, 0);
-  tft.printf("Lat:%2.2f\nLon:%2.2f\n\nRad:%2.1f km", lat, lon, displayRad);
 
-  drawRadar();
+  tft.setCursor(0, 0);
+  tft.printf("La:%2.2f", lat);
+
+  tft.setCursor(0, 10);
+  tft.printf("Lo:%2.2f", lon);
+
+  tft.setCursor(0, 23);
+  tft.printf("R:%2.2fkm", displayRad);
+
+
+
+  drawRadarCircle();
   printRadarLabels();
+
+  if (drawMaps)
+    drawRadarMaps();
 
   std::list<flight_info> flights;
   uint32_t lastUpdate = 99999;
@@ -782,8 +808,8 @@ void showFlights() {
     if (now % 1000 == 0) {
 
       tft.setTextColor(textColor);
-      tft.fillRect(0, 38, 40, 10, TFT_BLACK);
-      tft.setCursor(0, 38);
+      tft.fillRect(0, 36, 40, 10, TFT_BLACK);
+      tft.setCursor(0, 36);
 
       tft.printf(
         "T-%ld",
@@ -791,20 +817,19 @@ void showFlights() {
 
       blink = !blink;
 
-      if (blink)
+      if (blink) {
         tft.drawCircle(centerX, centerY, 1, TFT_WHITE);
-      else
-        tft.drawCircle(centerX, centerY, 1, TFT_RED);
+      } else {
+        tft.drawCircle(centerX, centerY, 1, TFT_BLACK);
+      }
     }
+
 
 
 
     tx = 0;
     ty = 0;
     pressed = get_Touch();
-
-
-
 
     //check touch is done BEFORE flights is refreshed, cause posX/posY
     // belong to what is currently on the screen.
@@ -825,12 +850,15 @@ void showFlights() {
           trackingAircraft = true;
           trackedFlight = f;
 
+          tft.fillRect(359, 40, 120, 193, TFT_BLACK);  // clear tracking window
+
           if (displayDebugInfo)
             Serial.printf("TRACK START: %s\n",
                           trackedICAO.c_str());
 
-          displayFlightData(trackedFlight);
+          displayFlightData(trackedFlight, f.latitude, f.longitude, lat, lon);
           sineTone(880, 200);
+
 
           break;
         }
@@ -839,9 +867,11 @@ void showFlights() {
 
 
 
-    // Refresh radar
-    
+    // Refresh radar  // first run
+
     if (now - lastUpdate > refreshRate) {
+
+
 
       lastUpdate = millis();
 
@@ -850,45 +880,52 @@ void showFlights() {
 
       // Erase previous aircraft / redraw radar
 
-      drawRadar();
+      if (!drawMaps) {  // draw the trails
+        drawRadarCircle();
+        for (auto &f : flights) {
 
-      for (auto &f : flights) {
+          RadarPoint pt = geoToRadarPixel(
+            f.latitude, f.longitude,
+            lat, lon,
+            displayRad,
+            diam,
+            centerX, centerY);
 
-        RadarPoint pt = geoToRadarPixel(
-          f.latitude, f.longitude,
-          lat, lon,
-          displayRad,
-          110,
-          centerX, centerY);
+          if (pt.inside) {
 
-        if (pt.inside) {
-
-          drawAircraft(  // convert to trail
-            pt.x - centerX,
-            pt.y - centerY,
-            f.heading,
-            f.call_sign.c_str(),
-            f.altitude,
-            true);
+            drawAircraft(  // convert to trail
+              pt.x - centerX,
+              pt.y - centerY,
+              f.heading,
+              f.call_sign.c_str(),
+              f.altitude,
+              true);
+          }
         }
       }
 
+      else {  // draw a new map
+        drawRadarMaps();
+        drawRadarCircle();
+      }
 
-      // tracker nees a new vector so the old displayed
 
-
+      // tracker needs a new vector so the old displayed
 
       std::list<flight_info> freshFlights;
 
       if (get_flights(
             lat, lon,
-            0.5, 0.5,
+            displayRad / 50, displayRad / 50,  // dynamically set the display radius
             true, false, false, false,
             freshFlights,
             error)) {
 
 
-
+        tft.fillRect(359, 40, 120, 193, TFT_BLACK);  // always overwrite tracking window to remove spillovers
+        tft.fillRect(358, 0, 1, 140, TFT_BLACK);      //tracking window border + remove spillover
+        tft.fillRect(358, 180, 1, 58, TFT_BLACK);
+        tft.fillRect(55, 130, 3, 60, TFT_BLACK);      // remove spillover left side
 
         //best to using ICAO for tracker
         if (trackingAircraft) {
@@ -916,25 +953,20 @@ void showFlights() {
 
           if (found) {
 
-            displayFlightData(trackedFlight);
+            displayFlightData(trackedFlight, trackedFlight.latitude, trackedFlight.longitude, lat, lon);
           }
-
-          else
-
-            tft.fillRect(340, 40, 130, 140, TFT_BLACK);  // overwrite tracking window
         }
 
         // refressh
         flights = freshFlights;
         //draw new
-
         for (auto &f : flights) {
 
           RadarPoint pt = geoToRadarPixel(
             f.latitude, f.longitude,
             lat, lon,
             displayRad,
-            110,
+            diam,
             centerX, centerY);
 
           if (pt.inside) {
@@ -948,7 +980,7 @@ void showFlights() {
               false);
 
             f.posX = (int)pt.x;
-            f.posY = 220 - (int)pt.y;  // still a bug?
+            f.posY = 2 * diam - (int)pt.y;  // still a bug?
 
             if (displayDebugInfo)
               Serial.println(f.toString());
@@ -967,7 +999,7 @@ void showFlights() {
     // ui and parser
     if (tft.getTouchRawZ() > 400) {
 
-      if (!radarUIParser(
+      if (!radarUI(
             centerX,
             centerY,
             &lastUpdate,
@@ -983,26 +1015,23 @@ void showFlights() {
 //##########################################################################################################################//
 
 
-void drawRadar() {  // circles
+void drawRadarCircle() {
 
-  tft.drawCircle(centerX, centerY, 110, TFT_GREEN);
-  tft.drawCircle(centerX, centerY, 82, TFT_DARKDARKGREY);
-  tft.drawCircle(centerX, centerY, 55, TFT_DARKDARKGREY);
-  tft.drawCircle(centerX, centerY, 27, TFT_DARKDARKGREY);
+  tft.drawCircle(centerX, centerY, 150, TFT_GREEN);
   tft.drawCircle(centerX, centerY, 1, TFT_RED);
 
-  tft.setCursor(centerX, centerY - 108);
+  tft.setTextColor(textColor);
+
+  tft.setCursor(centerX, centerY - 145);
   tft.print("N");
 
-
-  tft.setCursor(centerX, centerY + 101);
+  tft.setCursor(centerX, centerY + 140);
   tft.print("S");
 
-
-  tft.setCursor(centerX + 105, centerY);
+  tft.setCursor(centerX + 142, centerY);
   tft.print("E");
 
-  tft.setCursor(centerX - 108, centerY);
+  tft.setCursor(centerX - 148, centerY);
   tft.print("W");
 }
 
@@ -1036,20 +1065,29 @@ void drawAircraft(float dx, float dy, int heading,
 
   uint16_t color = altitudeColor(altitude);
 
-  if (drawTrail) {
-    tft.fillTriangle(x1, y1, x2, y2, x3, y3, TFT_BLACK);  // erase last triange
-    tft.fillCircle(x, y, 1, color);
+
+  if (!drawMaps) {
+    if (drawTrail) {
+      tft.fillTriangle(x1, y1, x2, y2, x3, y3, TFT_BLACK);  // erase last triang/e
+      tft.fillCircle(x, y, 1, color);                       // and draw a small circle
+    }
+
+    else {
+      tft.fillTriangle(x1, y1, x2, y2, x3, y3, color);  // draw new one
+    }
+
   }
 
   else
-    tft.fillTriangle(x1, y1, x2, y2, x3, y3, color);
+    tft.fillTriangle(x1, y1, x2, y2, x3, y3, color);  // omly draw new
+
 
 
   // Label
   int tbw = tft.textWidth(label);
 
 
-  int labelX = x + 8;
+  int labelX = x + 7;
   int labelY = y;
 
   int dxLabel = labelX - centerX;
@@ -1058,8 +1096,8 @@ void drawAircraft(float dx, float dy, int heading,
   float distLabel =
     sqrtf(dxLabel * dxLabel + dyLabel * dyLabel);
 
-  if (distLabel + tbw / 2 > 110) {
-    float scale = (110.0f - tbw / 2.0f) / distLabel;
+  if (distLabel + tbw / 2 > 160) {
+    float scale = (150.0f - tbw / 2.0f) / distLabel;
 
     labelX = centerX + dxLabel * scale;
     labelY = centerY + dyLabel * scale;
@@ -1067,28 +1105,37 @@ void drawAircraft(float dx, float dy, int heading,
 
   tft.setCursor(labelX, labelY);
 
-  if (drawTrail)
-    tft.setTextColor(TFT_BLACK);
-  else
-    tft.setTextColor(TFT_WHITE);
 
-  tft.print(label);
+  if (!drawMaps) {  // draw a trail and ovaerwrite labels black
+
+    if (drawTrail)
+      tft.setTextColor(TFT_BLACK);
+    else
+      tft.setTextColor(TFT_WHITE);
+    tft.print(label);
+
+  }
+
+  else {
+    tft.setTextColor(TFT_WHITE);
+    tft.print(label);
+  }
 }
 
 //##########################################################################################################################//
 
 
 uint16_t altitudeColor(uint32_t altitude) {
-  // Clamp altitude
+  // Clamp alt
   if (altitude > 40000) altitude = 40000;
 
   uint8_t r = 0, g = 0, b = 0;
 
   if (altitude <= 10000) {
     float t = altitude / 10000.0f;
-    r = (uint8_t)(255 * (1 - t));  // 255 → 0
+    b = (uint8_t)(255 * (1 - t));  // 255 → 0
     g = 255;                       // stays 255
-    b = 0;                         // stays 0
+    r = 0;                         // stays 0
   } else if (altitude <= 20000) {
     float t = (altitude - 10000) / 10000.0f;
     r = (uint8_t)(255 * t);        // 0 → 255
@@ -1122,12 +1169,14 @@ RadarPoint geoToRadarPixel(float flightLat, float flightLon,
   if (dLon > 180) dLon -= 360;
   if (dLon < -180) dLon += 360;
 
-  // Convert degree diff to km
+  // Convert deg diff to km
   float dxKm = dLon * cos(userLat * DEG_TO_RAD) * 111.0f;  // east-west
   float dyKm = (flightLat - userLat) * 111.0f;             // north-south
 
   // Distance from center
   float distKm = sqrt(dxKm * dxKm + dyKm * dyKm);
+
+
 
   RadarPoint pt;
   pt.inside = (distKm <= maxRadiusKm);
@@ -1145,7 +1194,7 @@ RadarPoint geoToRadarPixel(float flightLat, float flightLon,
 
   // Convert to screen coords
   pt.x = centerX + dxPix;  // east = right
-  pt.y = centerY + dyPix;  // north = up
+  pt.y = centerY + dyPix;  // nort = up
 
   return pt;
 }
@@ -1154,81 +1203,115 @@ RadarPoint geoToRadarPixel(float flightLat, float flightLon,
 void printRadarLabels() {
 
 
-  tft.setTextColor(TFT_GREENYELLOW);
-  tft.setCursor(260, 0);
-  tft.print("0-10000ft");
+  tft.setTextColor(TFT_BLUE);
+  tft.setCursor(405, 0);
+  tft.print("0-");
   tft.setTextColor(TFT_GREEN);
-  tft.setCursor(260, 10);
-  tft.print("10-20000ft");
+  tft.print("10000ft");
+  tft.setCursor(405, 10);
+  tft.print("10-");
   tft.setTextColor(TFT_RED);
-  tft.setCursor(260, 20);
-  tft.print("20-30000ft");
+  tft.print("20000ft");
+  tft.setCursor(405, 20);
+  tft.print("20-");
   tft.setTextColor(TFT_PURPLE);
-  tft.setCursor(260, 30);
+  tft.print("30000ft");
+  tft.setCursor(405, 30);
   tft.print("30000+ft");
   tft.setTextColor(textColor);
 
-  tft.drawRect(0, 60, 40, 20, TFT_CYAN);  // radius
-  tft.drawRect(0, 90, 40, 20, TFT_CYAN);
+  tft.drawRoundRect(0, 50, 40, 20, 3, TFT_CYAN);  // radius-
+  tft.fillRoundRect(1, 51, 38, 18, 3, TFT_NAVY);
 
-  tft.drawRect(0, 170, 50, 33, TFT_CYAN);  // clear
-  tft.fillRect(1, 171, 48, 31, TFT_NAVY);
+  tft.drawRoundRect(0, 78, 40, 20, 3, TFT_CYAN);  //radius+
+  tft.fillRoundRect(1, 79, 38, 18, 3, TFT_NAVY);
 
-  tft.setCursor(10, 67);
-  tft.print("Rad-");
-  tft.setCursor(10, 97);
-  tft.print("Rad+");
+  tft.drawRoundRect(0, 105, 40, 20, 3, TFT_CYAN);  // mode
+  tft.fillRoundRect(1, 106, 38, 18, 3, TFT_NAVY);
 
-  tft.setCursor(8, 175);
+
+  tft.drawRoundRect(0, 133, 50, 33, 3, TFT_CYAN);  // clear
+  tft.fillRoundRect(1, 134, 48, 31, 3, TFT_NAVY);
+
+  tft.setCursor(5, 57);
+  tft.print("Zoom+");
+  tft.setCursor(5, 84);
+  tft.print("Zoom-");
+
+  tft.setCursor(5, 111);
+  tft.print("Mode");
+
+
+
+  tft.setCursor(8, 138);
   tft.print("CLEAR");
-  tft.setCursor(8, 190);
+  tft.setCursor(8, 153);
   tft.print("TRAILS");
 
-  tft.drawRect(270, 170, 50, 33, TFT_RED);
-  tft.fillRect(271, 171, 48, 31, TFT_NAVY);
-  tft.setCursor(282, 182);
+  tft.setTextColor(TFT_WHITE);
+
+  tft.drawRoundRect(0, 183, 50, 33, 3, TFT_WHITE);
+  tft.fillRoundRect(1, 184, 48, 31, 3, TFT_MAROON);
+  tft.setCursor(11, 195);
   tft.print("EXIT");
 
-  int rows[] = { 235, 280 };
-  int cols[] = { 0, 100, 200, 300, 400 };
-  int w = 60;
-  int h = 40;
+  tft.drawRoundRect(383, 245, 70, 18, 3, TFT_WHITE);
+  tft.fillRoundRect(384, 246, 68, 16, 3, TFT_DARKGREEN);
+  tft.setCursor(390, 250);
+  tft.print("SCAN FREQS");
 
-  for (int r = 0; r < 2; r++) {
-    for (int c = 0; c < 5; c++) {
-      tft.drawRoundRect(cols[c], rows[r], w, h, 3, TFT_SKYBLUE);  // draw frequency buttons
-    }
+
+
+
+
+  int cols[] = { 0, 70, 140, 210, 280, 350, 420 };
+  int w = 55;
+  int h = 16;
+
+
+  for (int c = 0; c < 7; c++) {
+
+    tft.drawRoundRect(cols[c], 302, w + 1, h, 3, TFT_SKYBLUE);  // draw frequency buttons
+    tft.drawRoundRect(cols[c] + 1, 303, w - 1, h - 1, 3, TFT_VIOLET);
   }
+
+  tft.drawRoundRect(0, 272, w + 1, h, 3, TFT_SKYBLUE);
+  tft.drawRoundRect(1, 273, w - 1, h - 1, 3, TFT_VIOLET);
+
+  tft.drawRoundRect(360, 272, w + 1, h, 3, TFT_SKYBLUE);
+  tft.drawRoundRect(361, 273, w - 1, h - 1, 3, TFT_VIOLET);
+
+
+  tft.drawRoundRect(420, 272, w + 1, h, 3, TFT_SKYBLUE);
+  tft.drawRoundRect(421, 273, w - 1, h - 1, 3, TFT_VIOLET);
 
 
   tft.setTextColor(TFT_WHITE);
 
 
   // Labeled buttons
-
-  int xPosL[] = { 8, 108, 208, 308, 408 };
-  const char *keys[] = { "atcfreq1", "atcfreq2", "atcfreq3", "atcfreq4", "atcfreq5" };
-  const char *labels[] = { "Ground", "Tower", "Approach", "Control", "Clearance" };
+  const int xPos[] = { 8, 78, 145, 215, 285 };
+  const char *labels[] = { "Ground", "Tower", "Approach", "Control", "Clear." };
 
   for (int i = 0; i < 5; i++) {
-    // Frequency line
-    tft.setCursor(xPosL[i], 243);
-    float freq = (float)preferences.getLong(keys[i], 0) / 1000.0f;
-    tft.printf("%3.3f", freq);
-
-    // Label line
-    tft.setCursor(xPosL[i] - 3, 260);
+    tft.setCursor(xPos[i] - 3, 306);
     tft.print(labels[i]);
   }
 
 
+  // unlabeled buttons both rows
 
-  // unlabeled buttons
-  int xPosU[] = { 8, 108, 208, 308, 408 };
   const char *keysU[] = { "atcfreq6", "atcfreq7", "atcfreq8", "atcfreq9", "atcfreq10" };
+  const int xPos2[] = { 361, 421, 5, 361, 425 };
 
   for (int i = 0; i < 5; i++) {
-    tft.setCursor(xPosU[i], 295);
+
+
+    if (i < 2)
+      tft.setCursor(xPos2[i], 306);
+    else
+      tft.setCursor(xPos2[i], 277);
+
     float freq = (float)preferences.getLong(keysU[i], 0) / 1000.0f;
     tft.printf("%3.3f", freq);
   }
@@ -1238,122 +1321,187 @@ void printRadarLabels() {
 
 //##########################################################################################################################//
 
-bool radarUIParser(int centerX, int centerY, uint32_t *lastUpdate, float *displayRad) {
+bool radarUI(int centerX, int centerY, uint32_t *lastUpdate, float *displayRad) {
+
 
 
   get_Touch();
 
-
-  if (ty > 165 && ty < 205 && tx > 270) { // return
+  if (ty >= 183 && ty <= 216 && tx < 50) {  // return
     WiFi.disconnect();
     WiFi.mode(WIFI_OFF);
     return false;
   }
 
-  else if (ty > 165 && ty < 205 && tx < 50) {  // clear trails
-    tft.fillCircle(centerX, centerY, 118, TFT_BLACK);
-    drawRadar();
-    *lastUpdate = 999999;
+
+
+
+
+  else if (ty >= 245 && ty <= 265 && tx >= 380) {  // return
+    sineTone(880, 200);
+    scanATC = true;
+  }
+
+  else if (ty >= 105 && ty <= 125 && tx < 50) {  //mode change
+    drawMaps = !drawMaps;
+    if (!drawMaps) {
+      tft.fillRect(55, 0, 310, 300, TFT_BLACK);
+    }
+
+    drawRadarCircle();
+    printRadarLabels();
     tRel();
+    *lastUpdate = 999999;
+  }
+
+
+  else if (ty >= 133 && ty <= 166 && tx < 50) {        // clear trails
+    tft.fillCircle(centerX, centerY, 159, TFT_BLACK);  // this disk will partially overwrite the radar levels and clear label spillovers
+
+    if (drawMaps)
+      drawRadarMaps();  // this will overwrite the last image
+
+    printRadarLabels();  // so reprint them
+    drawRadarCircle();
+    tRel();
+    *lastUpdate = 999999;
     return true;
   }
 
 
-
-  else if (ty > 56 && ty < 85 && tx < 50) {  // decrease radius
+  else if (ty > 46 && ty < 75 && tx < 50) {  // decrease radius
     *displayRad /= 2;
     if (*displayRad < 3.125f)  // min
       *displayRad = 3.125f;
     tft.fillRect(0, 23, 70, 8, TFT_BLACK);
     tft.setCursor(0, 23);
     tft.setTextColor(textColor);
-    tft.printf("Rad:%2.1f km", *displayRad);  // print new radius
+    tft.printf("R:%2.1f km", *displayRad);  // print new radius
 
-    tft.fillCircle(centerX, centerY, 118, TFT_BLACK);
-    drawRadar();
+    tft.fillCircle(centerX, centerY, 150, TFT_BLACK);
+    drawRadarCircle();
     *lastUpdate = 999999;
     return true;
   }
 
 
-  else if (ty > 85 && ty < 115 && tx < 50) {  // increase radius
+  else if (ty >= 78 && ty < 98 && tx < 50) {  // increase radius
     *displayRad *= 2;
-    if (*displayRad > 50.0f)  // max
-      *displayRad = 50.0f;
+    if (*displayRad > 100.0f)  // max
+      *displayRad = 100.0f;
 
-    tft.fillRect(0, 23, 70, 8, TFT_BLACK);
+    tft.fillRect(0, 23, 60, 8, TFT_BLACK);
     tft.setCursor(0, 23);
     tft.setTextColor(textColor);
-    tft.printf("Rad:%2.1f km", *displayRad);  // print new radius
+    tft.printf("R:%2.1f km", *displayRad);  // print new radius
 
-    tft.fillCircle(centerX, centerY, 118, TFT_BLACK);  // overwrite disk
-    drawRadar();
+    tft.fillCircle(centerX, centerY, 150, TFT_BLACK);  // overwrite disk
+    drawRadarCircle();
     *lastUpdate = 999999;
     return true;
   }
+
+
+  int cols[] = { 0, 70, 140, 210, 280, 350, 420 };
+  int w = 55;
+  int h = 16;
+
+
+  for (int c = 0; c < 7; c++) {
+
+    tft.drawRoundRect(cols[c], 302, w + 1, h, 3, TFT_SKYBLUE);  // draw frequency buttons
+    tft.drawRoundRect(cols[c] + 1, 303, w - 1, h - 1, 3, TFT_VIOLET);
+  }
+
+
+
+  tft.drawRoundRect(0, 272, w + 1, h, 3, TFT_SKYBLUE);
+  tft.drawRoundRect(1, 273, w - 1, h - 1, 3, TFT_VIOLET);
+
+  tft.drawRoundRect(360, 272, w + 1, h, 3, TFT_SKYBLUE);
+  tft.drawRoundRect(361, 273, w - 1, h - 1, 3, TFT_VIOLET);
+
+
+  tft.drawRoundRect(420, 272, w + 1, h, 3, TFT_SKYBLUE);
+  tft.drawRoundRect(421, 273, w - 1, h - 1, 3, TFT_VIOLET);
 
 
 
 
   // FREQ buttons
-  if (ty > 235 && ty < 280) {  // labeled buttons
+  if (ty > 295) {
 
-    if (tx > 0 && tx < 50) {
-      FREQ = preferences.getLong("atcfreq1", 0);
+    scanATC = false;  // stop scanning
+
+    for (int i = 0; i < 7; i++) {
+
+      if (tx >= cols[i] && tx < cols[i] + w) {
+
+        char key[12];
+        snprintf(key, sizeof(key), "atcfreq%d", i + 1);
+
+        FREQ = preferences.getLong(key, 0);
+
+        tft.drawRoundRect(cols[i], 302, w + 1, h, 3, TFT_WHITE);
+        tft.drawRoundRect(cols[i] + 1, 303, w - 1, h - 1, 3, TFT_YELLOW);
+
+        break;
+      }
     }
-
-    else if (tx > 100 && tx < 150) {
-      FREQ = preferences.getLong("atcfreq2", 0);
-    } else if (tx > 200 && tx < 250) {  // Button 3
-      FREQ = preferences.getLong("atcfreq3", 0);
-    }
-
-    else if (tx > 300 && tx < 350) {
-      FREQ = preferences.getLong("atcfreq4", 0);
-    }  // Button 4
-
-    else if (tx > 400 && tx < 450) {  // Button 5
-      FREQ = preferences.getLong("atcfreq5", 0);
-    }
-
   }
 
-  else if (ty > 280) {  // unlabeled buttons
 
-    if (tx > 0 && tx < 50) {
-      FREQ = preferences.getLong("atcfreq6", 0);
-    }
+  else if (ty >= 270 && ty <= 293) {  // unlabeled buttons, upper row
 
-    else if (tx > 100 && tx < 150) {
-      FREQ = preferences.getLong("atcfreq7", 0);
-    } else if (tx > 200 && tx < 250) {
+    scanATC = false;  // stop scanning
+
+    if (tx > 0 && tx <= 55) {
       FREQ = preferences.getLong("atcfreq8", 0);
+      tft.drawRoundRect(0, 272, w + 1, h, 3, TFT_WHITE);  // draw frequency buttons
+      tft.drawRoundRect(0 + 1, 273, w - 1, h - 1, 3, TFT_YELLOW);
     }
 
-    else if (tx > 300 && tx < 350) {
+    else if (tx >= 345 && tx <= 390) {
       FREQ = preferences.getLong("atcfreq9", 0);
-    }  // Button 4
+      tft.drawRoundRect(360, 272, w + 1, h, 3, TFT_WHITE);  // draw frequency buttons
+      tft.drawRoundRect(360 + 1, 273, w - 1, h - 1, 3, TFT_YELLOW);
+    }
 
-    else if (tx > 400 && tx < 480) {
+    else if (tx > 420) {
       FREQ = preferences.getLong("atcfreq10", 0);
+      tft.drawRoundRect(420, 272, w + 1, h, 3, TFT_WHITE);  // draw frequency buttons
+      tft.drawRoundRect(420 + 1, 273, w - 1, h - 1, 3, TFT_YELLOW);
     }
   }
 
-  if (ty > 235 && FREQ < 150000) {  // avoid in between button errors
-    FREQ *= 1000;                   //  stored was in KHz
-    setFreq();
-    tft.setTextSize(2);
+  if (ty >= 283 && FREQ < 150000) {  // avoid in between button errors
+    FREQ *= 1000;                    //  stored was in KHz
+
+
     tft.setTextColor(TFT_WHITE);
-    tft.fillRect(350, 10, 120, 15, TFT_BLACK);
-    tft.setCursor(350, 10);
-    tft.printf("%ld KHz", FREQ / 1000);
+    tft.fillRect(0, 230, 50, 31, TFT_BLACK);
+    tft.drawRoundRect(0, 230, 50, 31, 3, TFT_WHITE);
+    tft.fillRoundRect(1, 231, 48, 29, 3, TFT_NAVY);
+
+    tft.setCursor(4, 235);
+    tft.print("FREQ:");
+
+    tft.setCursor(4, 249);
+    tft.printf("%3.3f", (float)FREQ / 1000000);
+
+    *lastUpdate = 999999;  // trigger a new update
+
+    setFreq();
+
+
+
+    tRel();
+
+
     tft.setTextSize(1);
     tft.setTextColor(textColor);
   }
 
-
-  if (ty > 235)
-    tRel();
   return true;
 }
 
@@ -1391,7 +1539,8 @@ bool loadATCFreqs() {
     char key[12];
     snprintf(key, sizeof(key), "atcfreq%d", i + 1);
 
-    if ((preferences.getLong(key, 0) != freq) || (!preferences.isKey(key)))  
+
+    if ((preferences.getLong(key, 0) != freq) || (!preferences.isKey(key)))
       preferences.putLong(key, (long)freq);
 
     start = comma + 1;
@@ -1402,49 +1551,228 @@ bool loadATCFreqs() {
 }
 
 //##########################################################################################################################//
-void radarSquelch() {
+void radarSquelch() {  // squelch and scan loop
 
-  getRSSIAndSNR();
+  static bool wasOpen = false;
+
+  getRSSIAndSNR();  // intial check for signal
   readSquelchPot(false);
   setSquelch();
   setTunerAGC(false);
+
+
+
+  if (scanATC && audioMuted) {  //scan mode, but no signal
+
+    if (wasOpen) {
+      delay(1000);  // delay, wait for answer on current freq
+      wasOpen = false;
+    }
+
+
+    getRSSIAndSNR();
+    readSquelchPot(false);
+    setSquelch();
+    setTunerAGC(false);
+
+    if (!audioMuted)  // have an answer signal, return;
+      return;
+
+
+
+    uint32_t start = millis();
+
+    while (true) {  // no signal, run scan loop
+
+
+      if (tft.getTouchRawZ() > 400)
+        return;  // touch leave
+
+
+      if (millis() - start > 2000)
+        return;  // leave to check for flight updates
+
+
+      char key[12];
+
+      for (int i = 0; i < 10; i++) {
+
+        if (tft.getTouchRawZ() > 400)  // touched, break loop
+          break;
+
+        snprintf(key, sizeof(key), "atcfreq%d", i + 1);
+        FREQ = preferences.getLong(key, 0);
+
+        FREQ *= 1000;  // was stored in KHz
+        setFreq();
+        delay(100);
+        getRSSIAndSNR();
+        readSquelchPot(false);
+        setSquelch();
+        setTunerAGC(false);
+
+
+        tft.setTextColor(TFT_WHITE);
+        tft.drawRoundRect(0, 230, 50, 31, 3, TFT_WHITE);
+
+        if (audioMuted)
+          tft.fillRoundRect(1, 231, 48, 29, 3, TFT_NAVY);
+        else
+          tft.fillRoundRect(1, 231, 48, 29, 3, TFT_DARKGREEN);
+
+        tft.setCursor(4, 235);
+        tft.print("FREQ:");
+
+        tft.setCursor(4, 245);
+        float freq = FREQ / 1000000.0f;
+        tft.printf("%3.3f", freq);
+
+
+
+
+        drawActiveButtonFrame(i);
+
+
+
+        if (!audioMuted) {
+          wasOpen = true;
+          return;
+        }
+      }
+    }
+  }
+}
+
+//##########################################################################################################################//
+
+
+void drawActiveButtonFrame(int i) {
+
+
+
+
+  int cols[] = { 0, 70, 140, 210, 280, 350, 420 };
+  int w = 55;
+  int h = 16;
+
+  if (i < 7) {
+
+    if (i > 0) {
+      tft.drawRoundRect(cols[i - 1], 302, w + 1, h, 3, TFT_SKYBLUE);  // restore prev. frame
+      tft.drawRoundRect(cols[i - 1] + 1, 303, w - 1, h - 1, 3, TFT_VIOLET);
+    }
+
+
+    tft.drawRoundRect(cols[i], 302, w + 1, h, 3, TFT_WHITE);
+    tft.drawRoundRect(cols[i] + 1, 303, w - 1, h - 1, 3, TFT_YELLOW);  // draw new frame
+
+
+
+    if (i == 0) {
+
+      tft.drawRoundRect(0, 302, w + 1, h, 3, TFT_WHITE);  //new
+      tft.drawRoundRect(1, 303, w - 1, h - 1, 3, TFT_YELLOW);
+
+      tft.drawRoundRect(420, 272, w + 1, h, 3, TFT_SKYBLUE);  // restore prev. frame
+      tft.drawRoundRect(421, 273, w - 1, h - 1, 3, TFT_VIOLET);
+    }
+
+  }
+
+
+  else if (i == 7) {
+
+    tft.drawRoundRect(420, 302, w + 1, h, 3, TFT_SKYBLUE);
+    tft.drawRoundRect(421, 302, w - 1, h - 1, 3, TFT_VIOLET);
+    tft.drawRoundRect(0, 272, w + 1, h, 3, TFT_WHITE);
+    tft.drawRoundRect(0 + 1, 273, w - 1, h - 1, 3, TFT_YELLOW);
+  }
+
+  else if (i == 8) {
+
+
+    tft.drawRoundRect(0, 272, w + 1, h, 3, TFT_SKYBLUE);
+    tft.drawRoundRect(0, 273, w - 1, h - 1, 3, TFT_VIOLET);
+    tft.drawRoundRect(360, 272, w + 1, h, 3, TFT_WHITE);
+    tft.drawRoundRect(360 + 1, 273, w - 1, h - 1, 3, TFT_YELLOW);
+  }
+
+  else if (i == 9) {
+    tft.drawRoundRect(360, 272, w + 1, h, 3, TFT_SKYBLUE);
+    tft.drawRoundRect(361, 273, w - 1, h - 1, 3, TFT_VIOLET);
+    tft.drawRoundRect(420, 272, w + 1, h, 3, TFT_WHITE);
+    tft.drawRoundRect(420 + 1, 273, w - 1, h - 1, 3, TFT_YELLOW);
+  }
 }
 
 
+
 //##########################################################################################################################//
-void displayFlightData(const flight_info &f) {
 
-  const int startX = 350;
-  const int startY = 40;
 
-  tft.fillRect(startX - 10, startY, 130, 140, TFT_DARKDARKGREY);
 
-  tft.setTextSize(2);
+void displayFlightData(const flight_info &f, float flightLat, float flightLon, float userLat, float userLon) {
+
+  // Normalize longitude difference to ±180°
+  float dLon = flightLon - userLon;
+  if (dLon > 180) dLon -= 360;
+  if (dLon < -180) dLon += 360;
+
+  // Convert deg diff to km
+  float dxKm = dLon * cos(userLat * DEG_TO_RAD) * 111.0f;  // east-west
+  float dyKm = (flightLat - userLat) * 111.0f;             // north-south
+
+  // Distance from center
+  float distKm = sqrt(dxKm * dxKm + dyKm * dyKm);
+
+  const int startX = 375;
+  const int startY = 55;
+
+
   tft.setTextColor(TFT_YELLOW);
-  tft.setCursor(startX, startY + 10);
+
+  tft.setCursor(startX, startY - 2);
+  tft.print("Tracking:");
+
+  tft.setCursor(startX, startY + 15);
   tft.print(f.call_sign);
-  tft.setTextSize(1);
 
-  tft.setCursor(startX, startY + 35);
-  tft.printf("ALT: %d ft", f.altitude);
+  tft.setCursor(startX, startY + 30);
+  tft.printf("Flight:%s", f.flight.c_str());
 
-  tft.setCursor(startX, startY + 50);
-  tft.printf("GS: %d kts", f.ground_speed);
+  tft.setCursor(startX, startY + 45);
+  tft.printf("Altitude:%dft", f.altitude);
 
-  tft.setCursor(startX, startY + 65);
-  tft.printf("HEADING: %d deg", f.heading);
+  tft.setCursor(startX, startY + 60);
+  if (f.vertical_speed < 0)
+    tft.setTextColor(TFT_RED);
+  else
+    tft.setTextColor(TFT_GREEN);
+  tft.printf("Vert. sp.:%dft", f.vertical_speed);
 
-  tft.setCursor(startX, startY + 80);
-  tft.printf("ORIGIN: %s", f.iata_origin_airport.c_str());
+  tft.setTextColor(TFT_YELLOW);
 
-  tft.setCursor(startX, startY + 95);
-  tft.printf("DDEST.: %s", f.iata_destination_airport.c_str());
+  tft.setCursor(startX, startY + 75);
+  tft.printf("Ground sp.:%dkt", f.ground_speed);
 
-  tft.setCursor(startX, startY + 110);
-  tft.printf("TYPE: %s", f.aircraft_code.c_str());
+  tft.setCursor(startX, startY + 90);
+  tft.printf("Heading:%ddeg", f.heading);
 
-  tft.setCursor(startX, startY + 125);
-  tft.printf("AIRL.: %s", f.icao_airline.c_str());
+  tft.setCursor(startX, startY + 105);
+  tft.printf("Origin:%s", f.iata_origin_airport.c_str());
+
+  tft.setCursor(startX, startY + 120);
+  tft.printf("Destination.:%s", f.iata_destination_airport.c_str());
+
+  tft.setCursor(startX, startY + 135);
+  tft.printf("Type:%s", f.aircraft_code.c_str());
+
+  tft.setCursor(startX, startY + 150);
+  tft.printf("Airline:%s", f.icao_airline.c_str());
+
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(startX, startY + 170);
+  tft.printf("Distance:%2.1fkm", distKm);
 }
 /*
 
@@ -1467,3 +1795,93 @@ void displayFlightData(const flight_info &f) {
     String call_sign;
     String icao_airline;
 */
+
+//##########################################################################################################################//
+
+void drawRadarMaps() {
+
+  TJpgDec.setSwapBytes(true);
+  TJpgDec.setCallback(tft_output);
+  TJpgDec.setJpgScale(0);
+
+
+  JRESULT r = JDR_INP;  // default = failure
+
+  if (displayRad == 3.125f)
+    r = TJpgDec.drawFsJpg(58, 0, "/3125.jpg");  //208 -150
+
+  else if (displayRad == 6.25f)
+    r = TJpgDec.drawFsJpg(58, 0, "/6250.jpg");
+
+  else if (displayRad == 12.5f)
+    r = TJpgDec.drawFsJpg(58, 0, "/12500.jpg");
+
+  else if (displayRad == 25.0f)
+    r = TJpgDec.drawFsJpg(58, 0, "/25000.jpg");
+
+  else if (displayRad == 50.0f)
+    r = TJpgDec.drawFsJpg(58, 0, "/50000.jpg");
+
+  else if (displayRad == 100.0f)
+    r = TJpgDec.drawFsJpg(58, 0, "/100000.jpg");
+
+  if (r != JDR_OK) {
+    drawMaps = false;
+    tft.fillRoundRect(0, 105, 40, 20, 3, TFT_RED);  // no map file
+    delay(300);
+  }
+}
+
+
+
+
+
+
+
+//###############################################################################################//
+
+//JPG helpers
+
+//##########################################################################################################################//
+
+
+//====================================================================================
+//                                    tft_output
+//====================================================================================
+// This next function will be called during decoding of the jpeg file to
+// render each block to the TFT.  If you use a different TFT library
+// you will need to adapt this function to suit.
+bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap) {
+  // Stop further decoding as image is running off bottom of screen
+  if (y >= tft.height()) return 0;
+
+  // This function will clip the image block rendering automatically at the TFT boundaries
+  tft.pushImage(x, y, w, h, bitmap);
+
+  // This might work instead if you adapt the sketch to use the Adafruit_GFX library
+  // tft.drawRGBBitmap(x, y, bitmap, w, h);
+
+  // Return 1 to decode next block
+  return 1;
+}
+
+//====================================================================================
+//
+//====================================================================================
+
+void loadFile(const char *name) {
+
+
+  // Get the width and height in pixels of the jpeg if you wish
+  uint16_t w = 0, h = 0, scale;
+  TJpgDec.getFsJpgSize(&w, &h, name, LittleFS);  // Note name preceded with "/"
+  tft.setRotation(w > h ? 1 : 0);
+
+  for (scale = 1; scale <= 8; scale <<= 1) {
+    if (w <= tft.width() * scale && h <= tft.height() * scale) break;
+  }
+  TJpgDec.setJpgScale(scale);
+
+  // Draw the image, top left at 0,0
+  TJpgDec.drawFsJpg(0, 0, name, LittleFS);
+}

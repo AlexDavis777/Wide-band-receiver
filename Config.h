@@ -241,7 +241,7 @@ const uint16_t size_content = sizeof ssb_patch_content;  // see ssb_patch_conten
 volatile bool clw = false;                               // encoder direction clockwise
 volatile bool cclw = false;                              // counter clockwise
 
-const char ver[] = "V.611";  // version
+const char ver[] = "V.614";  // version
 
 long I2C_BUSSPEED = 500000;  // Adjust as needed.
 long STEP;                    //STEP size
@@ -582,7 +582,7 @@ struct flight_info
 struct RadarPoint {
     int x;
     int y;
-    bool inside; // true if within circle
+    bool inside; // true if within circle distKm 
 };
 
 
