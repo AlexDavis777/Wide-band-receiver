@@ -144,8 +144,8 @@ void drawIBtns() {
 
     { 20, 133, "Get" },
     { 20, 153, "UTC" },
-    { 100, 133, "Kiwi" },
-    { 100, 153, "SDR" },
+    { 100, 133, "" },
+    { 100, 153, "" },
     { 188, 133, "WiFi" },
     { 188, 153, "Interf." },
     { 270, 133, "Flight" },
@@ -200,15 +200,7 @@ void readIBtns() {
       getTime();
       break;
     case 22:
-      if (!setupKiwi())
-        return;
-      timerEnd(timer);  // free resources
-      loopKiwi();
-      startAudioSampler();
-      WiFi.disconnect();
-      WiFi.mode(WIFI_OFF);
       break;
-
     case 23:
       webIF();
       break;
