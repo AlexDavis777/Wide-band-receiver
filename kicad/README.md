@@ -1,8 +1,7 @@
 # Wide band receiver
 Added prototype PCBs. Open Source Hardware. Please feel free to use or adapt and improve as you see fit for your project.
 
-Rev2 Radio board includes support MAR6-SM on same footprint as SBB5089 and for using ADE-1+ mixer
-alternative instead of AD831.
+Rev3 Radio board includes support for extra gain block with MAR6-SM on same footprint as SBB5089 and for using ADE-1+ mixer alternative instead of AD831.
 The ADE-1+ mixer does away with a need for the 9 volt regulator and enables powering the radio from 7.4 volts, thus
 halving current consumption and reduces regulator heat, making the device more portable.
 
