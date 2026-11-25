@@ -21,14 +21,9 @@
 
 //#define TINYSA_PRESENT  // Syncs and controls a tinySA with receiving frequency, if connected via serial to the ESP32.
 
-#define SW_ATTENUATOR_PRESENT  // Activate only if a voltage controlled attenuator is present in the shortwave RF path. Generates gain control voltage on dac1(GPIO_NUM_25). 0V = max. gain, 3.3V = min gain.
+//#define SW_ATTENUATOR_PRESENT  // Activate only if a voltage controlled attenuator is present in the shortwave RF path. Generates gain control voltage on dac1(GPIO_NUM_25). 0V = max. gain, 3.3V = min gain.
 
 #define HTTTP_PORT 80  // Port for remote interface. Change if you connect from outside your local WiFi.
-
-//#define FLIP_IMAGE  // Activate this if the image is upside down.
-
-//#define TFT_INVERSION_ON  // Activate if the image is inverted.
-
 
 //##########################################################################################################################//
 
@@ -362,6 +357,14 @@ Open the IP shown in the first screen to remote control the receiver.
 Audio DSP: Invokes a digital audio processor. Due to the tight timing required, the audio processor can only run in it's own window. Tuning via encoder stays activated. 
 PR4, the trimpot connected to GPIO 26, will adjust the audio volume. If the audio sounds dull, reduce C11.
 
+Flight radar:
+Fetches frequencies from file "atcfreqs.lst" on SPIFFS. Fetches data from FlightRadar24.
+File has 10 csv entries, the first 5 correspond to ground, tower, approach, control and clearance buttons. The other 5 are not labeled. Populate file accordingly. Tap on a button to listen. 
+Needs latitude and longitude set (3rd config menu), these will be the represented by the center of the radar disk. Trails will build up over time, they are nice to see routes. 
+To see flight details, tap on the aircraft triangle (good touchscreen calibration is needed). 
+Tapping on "Mode" will put the radar in map mode and it will display the aircraft on an underlaying map.
+These maps must be manually created and loaded onto the LittleFS. 5 maps, one for each zoom level, are required. They must be 300*300 pixels wide, jpg format and 
+have the location in it's center. They must cover exactly the radar's range, for example the map for 50km radius (50000.jpg) must show a 100x100km square.
 
 
 Screen indicators that change parameters when tapped:
@@ -404,10 +407,12 @@ Signal strength history (bottom right). Tap to hide/unhide.
 #include <WebServer.h>            // Web server (ESP32 core)
 #include "SD.h"                   // SD card support (ESP32 core)
 #include "esp_adc/adc_oneshot.h"  // ESP‑IDF ADC driver (core)
+#include <list>
 
 // Needs to be installed separately (via Arduino Library Manager or GitHub)
 #include <TFT_eSPI.h>         // Library Manager: "TFT_eSPI" by Bodmer
 #include <JPEGDecoder.h>      // Library Manager: "JPEGDecoder" by Bodmer
+#include <TJpg_Decoder.h>
 #include <si5351.h>           // Library Manager: "Si5351Arduino" by Jason Milldrum
 #include "arduinoFFT.h"       // Library Manager: "arduinoFFT" by kosme
 #include "DacESP32.h"         // Library Manager: "DacESP32" (ESP32 DAC library)
@@ -415,11 +420,10 @@ Signal strength history (bottom right). Tap to hide/unhide.
 #include "SI4735.h"           // Library Manager: "SI4735" by Ricardo Caratti
 #define DISABLE_FS_H_WARNING  // Needed to disable warning caused by SdFat.h, "type File not defined".
 #include <SdFat.h>            // Library Manager: "SdFat" by Bill Greiman
-
+#include <WebSocketsClient.h>  // needs to be modified for packet size 50K
 #include <ESPAsyncWebServer.h>  // Install from Github: https://github.com/ESP32Async/ESPAsyncWebServer, also install dependency https://github.com/ESP32Async/AsyncTCP
 #include <TFT_eSPI_ext.h>       // Install from Github:  https://github.com/FrankBoesing/TFT_eSPI_ext
-
-
+#include <ArduinoJson.h>
 
 
 // Project-specific (local headers included with project)
@@ -499,7 +503,15 @@ void setup() {
   pinMode(ENCODER_PIN_B, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_A), RotaryEncFreq, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_B), RotaryEncFreq, CHANGE);
-
+  pinMode(ENCODER_BUTTON, INPUT_PULLUP);  // needed during while (true)
+  pinMode(RELAY_SWITCH_OUTPUT, OUTPUT);  // pin for relays and to enable tuner voltage
+  pinMode(TUNER_AGC_PIN, OUTPUT);
+  pinMode(NBFM_MUTE_PIN, OUTPUT);
+  pinMode(MUTEPIN, OUTPUT);
+  pinMode(AUDIO_INPUT_PIN, INPUT);           // Audio FFT
+  pinMode(PULSE_PIN, INPUT);                 // Audio square wave
+  pinMode(IF_FILTER_BANDWIDTH_PIN, OUTPUT);  // IF filter
+  
   bootScreen();
   etft.TTFdestination(&tft);  // Additional fonts
   etft.setTTFFont(Arial_13);
@@ -516,15 +528,10 @@ void setup() {
   // uint16_t calData[5] = { 292 3333, 198, 3539, 7 };  //example for display 4.0
   tft.setTouch(calData);
   loadLastSettings();  // load settings from flash
+  
+
   drawFrame();
   spriteBorder();
-  pinMode(RELAY_SWITCH_OUTPUT, OUTPUT);  // pin for relays and to enable tuner voltage
-  pinMode(TUNER_AGC_PIN, OUTPUT);
-  pinMode(NBFM_MUTE_PIN, OUTPUT);
-  pinMode(MUTEPIN, OUTPUT);
-  pinMode(AUDIO_INPUT_PIN, INPUT);           // Audio FFT
-  pinMode(PULSE_PIN, INPUT);                 // Audio square wave
-  pinMode(IF_FILTER_BANDWIDTH_PIN, OUTPUT);  // IF filter
 
 #ifdef NBFM_DEMODULATOR_PRESENT
   pinMode(TUNING_VOLTAGE_READ_PIN, INPUT);  // NBFM demodulator AFC read pin

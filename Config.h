@@ -229,7 +229,8 @@ RingBuffer logBuffer;                                                  // debug 
 WebServer server(80);                // LittleFS uploader
 AsyncWebServer aserver(HTTTP_PORT);  // WiFi interface
 AsyncWebSocket ws("/ws");            // websocket
-
+WebSocketsClient wsSND;             // KiwiSDR Lib needs to be modified for 50K packet size 
+WebSocketsClient wsWF;
 
 
 //##########################################################################################################################//
@@ -240,7 +241,7 @@ const uint16_t size_content = sizeof ssb_patch_content;  // see ssb_patch_conten
 volatile bool clw = false;                               // encoder direction clockwise
 volatile bool cclw = false;                              // counter clockwise
 
-const char ver[] = "V.611";  // version
+const char ver[] = "V.614";  // version
 
 long I2C_BUSSPEED = 500000;  // Adjust as needed.
 long STEP;                    //STEP size
@@ -325,6 +326,9 @@ bool useNixieDial = false;
 bool fastBoot = false;  // quick boot when enabled
 bool enableRigCtl = false;
 bool recordWav = false;
+bool firstR = false; // first run
+bool  flipImage = false;
+bool  invertColors = false;
 
 
 const int Xsmtr = 10;  // Smeter position
@@ -347,6 +351,7 @@ uint8_t SNR = 0;
 int8_t signalStrength = 0;  // RSSI
 float microVolts;
 uint8_t modType = 1;                        //modulation type,
+uint8_t lastModType = modType;              // last modulation type,
 uint16_t tx = 0, ty = 0, ttx = 0, tty = 0;  // touchscreen coordinates and temporary copies
 uint16_t row = 0, column = 0;               // buttons are grouped in rows and columns
 uint16_t recordStartTime;                   // for audio recording to SDCard
@@ -381,7 +386,7 @@ bool showTouchCoordinates = false;  // debug
 bool sprite2Init = false;           // sprite for rolling RSSI graph needs 15K ram
 int loopDelay = 0;                  // stabilize loop at not less than 10ms
 int16_t cRow = 1;                   // channel row when displaying memory.csv file
-
+uint8_t dacDelay = 70;             // KiwiSDR microseconds for each sample
 
 
 // Waterfall
@@ -411,6 +416,7 @@ bool stopState = false;          // stop when a SNR is detected
 bool audioPeakDetected = false;  // signal found when audio peak detected
 int audioPeakVal = 0;
 int audioTreshold = 45;
+bool showKiwiWF = false;
 
 //FFT
 
@@ -495,7 +501,7 @@ const char* host5 =  "https://rigreference.com/solar/img/wide";
 const char* al = "https://services.swpc.noaa.gov/products/alerts.json";     // Spaceweather alerts from NOAA
 const char* fr = "https://services.swpc.noaa.gov/text/3-day-forecast.txt";  // Forecast from NOAA
 
-
+char* url = nullptr;  // internet radio and Kiwi
 
 //##########################################################################################################################//
 // structures
@@ -531,9 +537,82 @@ tftSwitch nbSwitch = { 350, 70, false };  // noiseblanker
 tftSwitch nrSwitch = { 350, 270, false }; // noise reduction 
 
 
+
+// Flight info structure
+struct flight_info
+{
+    String icao_address;
+    float latitude;
+    float longitude;
+    int heading;
+    int altitude;
+    int ground_speed;
+    String squawk;
+    String radar;
+    String aircraft_code;
+    String registration;
+    time_t timestamp;
+    String iata_origin_airport;
+    String iata_destination_airport;
+    String flight;
+    bool on_ground;
+    int vertical_speed;
+    String call_sign;
+    String icao_airline;
+    int posX;
+    int posY;
+    String toString() const
+    {
+        return "ICAO " + icao_address + ": Flight " + flight +
+               " from " + iata_origin_airport + " to " + iata_destination_airport +
+               ", Squawk: " + squawk + ", Radar: " + radar +
+               ", Registration: " + registration +
+               ", Lat: " + String(latitude) + ", Lon: " + String(longitude) +
+               ", Altitude: " + String(altitude) + " ft, Ground speed: " +
+               String(ground_speed) + " kts, Heading: " + String(heading) +
+               " degrees, Vertical speed: " + String(vertical_speed) +
+               ", Aircraft code: " + aircraft_code +
+               ", Airline: " + icao_airline;
+    }
+};
+
+
+
+
+struct RadarPoint {
+    int x;
+    int y;
+    bool inside; // true if within circle distKm 
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+struct KiwiEntry { // KiwiSDR URL's
+    char host[64];
+    uint16_t port;
+    char comment[32];
+};
+
+KiwiEntry kiwi[10];
+uint8_t kiwiCount = 0;
+
 // Original lists to load when CSV files missing.If a CSV file on the LittleFS is found, values will be loaded from the
 // LittleFS. The LittleFS can be deleted or be overwritten by copying files from an SDcard, so editing of the parameters is possible without recompiling.
-
 
 struct MemoInfo {
   int memoNumber;

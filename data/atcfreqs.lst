@@ -1,0 +1,5 @@
+121900,118600,120500,119600,121300,127675,126800,118300,124100,000000,
+
+This file holds the air traffic control frequencies for the flightradar module.Frequencies are in KHz.
+The first 5 frequencies correspond to buttons: Ground, Tower, Approach, Control, Clearance.
+The second 5 frequencies are the unlabeled buttons.
